@@ -17,6 +17,9 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -51,6 +54,142 @@ import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
+
+data class BottomBarColorPreset(
+    val name: String,
+    val lightBg: Color,
+    val darkBg: Color,
+    val lightOnSelected: Color,
+    val darkOnSelected: Color,
+    val lightUnselected: Color,
+    val darkUnselected: Color,
+    val lightSelectedContainer: Color,
+    val darkSelectedContainer: Color
+)
+
+val BottomBarPresets = listOf(
+    BottomBarColorPreset(
+        name = "الافتراضي",
+        lightBg = Color.White,
+        darkBg = Color(0xFF1C1B26),
+        lightOnSelected = Color(0xFF7C5CFF), // LavenderPrimary
+        darkOnSelected = Color(0xFFB19DFF), // LavenderSecondary
+        lightUnselected = Color(0xFF767482),
+        darkUnselected = Color(0xFFBBB8CF),
+        lightSelectedContainer = Color(0xFFF1EEFF),
+        darkSelectedContainer = Color(0xFF2A283E)
+    ),
+    BottomBarColorPreset(
+        name = "الأزرق الملكي",
+        lightBg = Color(0xFFE3F2FD),
+        darkBg = Color(0xFF0D47A1),
+        lightOnSelected = Color(0xFF1565C0),
+        darkOnSelected = Color(0xFF90CAF9),
+        lightUnselected = Color(0xFF546E7A),
+        darkUnselected = Color(0xFFB0BEC5),
+        lightSelectedContainer = Color(0xFFBBDEFB),
+        darkSelectedContainer = Color(0xFF1565C0)
+    ),
+    BottomBarColorPreset(
+        name = "الأخضر الزمردي",
+        lightBg = Color(0xFFE8F5E9),
+        darkBg = Color(0xFF1B5E20),
+        lightOnSelected = Color(0xFF2E7D32),
+        darkOnSelected = Color(0xFFA5D6A7),
+        lightUnselected = Color(0xFF4F5B66),
+        darkUnselected = Color(0xFFC8E6C9),
+        lightSelectedContainer = Color(0xFFC8E6C9),
+        darkSelectedContainer = Color(0xFF2E7D32)
+    ),
+    BottomBarColorPreset(
+        name = "البرتقالي الدافئ",
+        lightBg = Color(0xFFFFF3E0),
+        darkBg = Color(0xFFE65100),
+        lightOnSelected = Color(0xFFD84315),
+        darkOnSelected = Color(0xFFFFB74D),
+        lightUnselected = Color(0xFF5D4037),
+        darkUnselected = Color(0xFFFFE0B2),
+        lightSelectedContainer = Color(0xFFFFE0B2),
+        darkSelectedContainer = Color(0xFFD84315)
+    ),
+    BottomBarColorPreset(
+        name = "الأحمر القرمزي",
+        lightBg = Color(0xFFFFEBEE),
+        darkBg = Color(0xFFB71C1C),
+        lightOnSelected = Color(0xFFC62828),
+        darkOnSelected = Color(0xFFFFCDD2),
+        lightUnselected = Color(0xFF5D4037),
+        darkUnselected = Color(0xFFFFCDD2),
+        lightSelectedContainer = Color(0xFFFFCDD2),
+        darkSelectedContainer = Color(0xFFC62828)
+    ),
+    BottomBarColorPreset(
+        name = "خيال اللافندر",
+        lightBg = Color(0xFFF3E5F5),
+        darkBg = Color(0xFF4A148C),
+        lightOnSelected = Color(0xFF6A1B9A),
+        darkOnSelected = Color(0xFFE1BEE7),
+        lightUnselected = Color(0xFF4A148C),
+        darkUnselected = Color(0xFFE1BEE7),
+        lightSelectedContainer = Color(0xFFE1BEE7),
+        darkSelectedContainer = Color(0xFF6A1B9A)
+    ),
+    BottomBarColorPreset(
+        name = "السيبي دافئ",
+        lightBg = Color(0xFFEFEBE9),
+        darkBg = Color(0xFF3E2723),
+        lightOnSelected = Color(0xFF4E342E),
+        darkOnSelected = Color(0xFFD7CCC8),
+        lightUnselected = Color(0xFF705751),
+        darkUnselected = Color(0xFFD7CCC8),
+        lightSelectedContainer = Color(0xFFD7CCC8),
+        darkSelectedContainer = Color(0xFF4E342E)
+    ),
+    BottomBarColorPreset(
+        name = "نسيم التيل",
+        lightBg = Color(0xFFE0F2F1),
+        darkBg = Color(0xFF004D40),
+        lightOnSelected = Color(0xFF00695C),
+        darkOnSelected = Color(0xFF80CBC4),
+        lightUnselected = Color(0xFF37474F),
+        darkUnselected = Color(0xFFB2DFDB),
+        lightSelectedContainer = Color(0xFFB2DFDB),
+        darkSelectedContainer = Color(0xFF00695C)
+    ),
+    BottomBarColorPreset(
+        name = "الوردي المرجاني",
+        lightBg = Color(0xFFFCE4EC),
+        darkBg = Color(0xFF880E4F),
+        lightOnSelected = Color(0xFFAD1457),
+        darkOnSelected = Color(0xFFF8BBD0),
+        lightUnselected = Color(0xFF4A148C),
+        darkUnselected = Color(0xFFF8BBD0),
+        lightSelectedContainer = Color(0xFFF8BBD0),
+        darkSelectedContainer = Color(0xFFAD1457)
+    ),
+    BottomBarColorPreset(
+        name = "إنديغو السيبراني",
+        lightBg = Color(0xFFE8EAF6),
+        darkBg = Color(0xFF1A237E),
+        lightOnSelected = Color(0xFF283593),
+        darkOnSelected = Color(0xFFC5CAE9),
+        lightUnselected = Color(0xFF3F51B5),
+        darkUnselected = Color(0xFFC5CAE9),
+        lightSelectedContainer = Color(0xFFC5CAE9),
+        darkSelectedContainer = Color(0xFF283593)
+    ),
+    BottomBarColorPreset(
+        name = "الفحم الحجري",
+        lightBg = Color(0xFFECEFF1),
+        darkBg = Color(0xFF263238),
+        lightOnSelected = Color(0xFF37474F),
+        darkOnSelected = Color(0xFFCFD8DC),
+        lightUnselected = Color(0xFF455A64),
+        darkUnselected = Color(0xFFCFD8DC),
+        lightSelectedContainer = Color(0xFFCFD8DC),
+        darkSelectedContainer = Color(0xFF37474F)
+    )
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,6 +227,7 @@ fun DashboardScreen(
             CustomBottomBar(
                 selectedTab = uiState.selectedTab,
                 showTools = uiState.showToolsTab,
+                bottomBarColorIndex = uiState.bottomBarColorIndex,
                 onTabSelected = { viewModel.setTab(it) }
             )
         },
@@ -242,23 +382,23 @@ fun HomeTabScreen(
                 )
             }
 
-            // Two Premium Header Icons (Stats & Sort)
+            // Two Premium Header Icons (Stats & Sort) - Separated Circular Buttons
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Statistics Icon Button (Square with chart drawing inside)
+                // Statistics Icon Button
                 IconButton(
                     onClick = { showStatsSheet = true },
                     modifier = Modifier
-                        .size(40.dp)
-                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                        .size(38.dp)
+                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f), CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Assessment,
                         contentDescription = "إحصائيات المكتبة",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
@@ -266,14 +406,14 @@ fun HomeTabScreen(
                 IconButton(
                     onClick = { showSortSheet = true },
                     modifier = Modifier
-                        .size(40.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                        .size(38.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = "ترتيب الملفات",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -330,11 +470,7 @@ fun HomeTabScreen(
             }
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        StorageStatusCard(storageInfo = uiState.storageInfo)
-
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         // Filters and View Toggle Row
         Row(
@@ -364,19 +500,43 @@ fun HomeTabScreen(
                 )
             }
 
-            // Grid / List Toggle Button
-            IconButton(
-                onClick = { viewModel.toggleGridView() },
-                modifier = Modifier
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)
-                    .size(36.dp)
+            // Controls Row (Refresh scan + Grid/List Toggle)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = if (uiState.isGridView) Icons.Default.List else Icons.Default.GridView,
-                    contentDescription = "تبديل المظهر",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
-                )
+                // Refresh/Scan Button (Same size as list toggle)
+                IconButton(
+                    onClick = {
+                        viewModel.scanFiles(context)
+                        Toast.makeText(context, "تم تحديث وفحص المجلدات لجلب أحدث ملفات الـ PDF!", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)
+                        .size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "تحديث وفحص الملفات",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Grid / List Toggle Button
+                IconButton(
+                    onClick = { viewModel.toggleGridView() },
+                    modifier = Modifier
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)
+                        .size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = if (uiState.isGridView) Icons.Default.List else Icons.Default.GridView,
+                        contentDescription = "تبديل المظهر",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
 
@@ -1626,6 +1786,27 @@ fun ToolGridCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val finalBgColor = if (isDarkTheme) {
+        when (color) {
+            Color(0xFFE6E0FF) -> Color(0xFF231F3A)
+            Color(0xFFFFF9C4) -> Color(0xFF332D15)
+            Color(0xFFF1EEFF) -> Color(0xFF1E1A33)
+            else -> Color(0xFF2A283E)
+        }
+    } else {
+        color
+    }
+    
+    val finalIconTint = if (isDarkTheme) {
+        when (color) {
+            Color(0xFFFFF9C4) -> Color(0xFFFFD54F) // YellowAccent
+            else -> Color(0xFFB19DFF) // LavenderSecondary
+        }
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -1644,13 +1825,13 @@ fun ToolGridCard(
             Box(
                 modifier = Modifier
                     .size(38.dp)
-                    .background(color, RoundedCornerShape(10.dp)),
+                    .background(finalBgColor, RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface,
+                    tint = finalIconTint,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -1770,6 +1951,25 @@ fun SettingsTabScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column {
+                        // App Theme Row
+                        SettingsSelectionRow(
+                            icon = Icons.Default.Brightness4,
+                            title = "مظهر التطبيق",
+                            value = when (uiState.appTheme) {
+                                "dark" -> "الوضع الداكن"
+                                "light" -> "الوضع الفاتح"
+                                else -> "تلقائي (حسب النظام)"
+                            },
+                            onClick = {
+                                val themes = listOf("system", "light", "dark")
+                                val currentIdx = themes.indexOf(uiState.appTheme)
+                                val nextTheme = themes[(currentIdx + 1) % themes.size]
+                                viewModel.setAppTheme(context, nextTheme)
+                            }
+                        )
+                        
+                        Divider(color = Color.LightGray.copy(alpha = 0.3f), thickness = 0.5.dp)
+
                         // Show Tools Tab Toggle Option
                         SettingsSwitchRow(
                             icon = Icons.Default.Grid3x3,
@@ -1778,6 +1978,79 @@ fun SettingsTabScreen(
                             checked = uiState.showToolsTab,
                             onCheckedChange = { viewModel.setShowToolsTab(context, it) }
                         )
+                    }
+                }
+            }
+
+            // BOTTOM BAR CUSTOMIZATION SECTION
+            item {
+                SettingsSectionHeader(title = "تخصيص لون الشريط السفلي")
+            }
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "اختر لوناً لشريط التنقل السفلي للتطبيق (11 خياراً):",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                        
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            itemsIndexed(BottomBarPresets) { index, preset ->
+                                val isSelected = uiState.bottomBarColorIndex == index
+                                val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
+                                val previewBg = if (index == 0) {
+                                    if (isDarkTheme) Color(0xFF1C1B26) else Color.White
+                                } else {
+                                    if (isDarkTheme) preset.darkBg else preset.lightBg
+                                }
+                                val previewAccent = if (index == 0) {
+                                    Color(0xFF7C5CFF) // LavenderPrimary
+                                } else {
+                                    if (isDarkTheme) preset.darkOnSelected else preset.lightOnSelected
+                                }
+                                
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(CircleShape)
+                                        .background(previewBg)
+                                        .border(
+                                            width = if (isSelected) 3.dp else 1.dp,
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f),
+                                            shape = CircleShape
+                                        )
+                                        .clickable { viewModel.setBottomBarColorIndex(context, index) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (index == 0) {
+                                        Icon(
+                                            imageVector = Icons.Default.Palette,
+                                            contentDescription = null,
+                                            tint = previewAccent,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(14.dp)
+                                                .clip(CircleShape)
+                                                .background(previewAccent)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1886,7 +2159,7 @@ fun SettingsSwitchRow(
             Box(
                 modifier = Modifier
                     .size(36.dp)
-                    .background(Color(0xFFF1EEFF), RoundedCornerShape(8.dp)),
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f), RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
@@ -1929,7 +2202,7 @@ fun SettingsSelectionRow(
             Box(
                 modifier = Modifier
                     .size(36.dp)
-                    .background(Color(0xFFF1EEFF), RoundedCornerShape(8.dp)),
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f), RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
@@ -1963,11 +2236,39 @@ fun SettingsSelectionRow(
 fun CustomBottomBar(
     selectedTab: DashboardTab,
     showTools: Boolean,
+    bottomBarColorIndex: Int,
     onTabSelected: (DashboardTab) -> Unit
 ) {
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val preset = BottomBarPresets.getOrElse(bottomBarColorIndex) { BottomBarPresets[0] }
+    
+    val barColor = if (bottomBarColorIndex == 0) {
+        MaterialTheme.colorScheme.surface
+    } else {
+        if (isDark) preset.darkBg else preset.lightBg
+    }
+    
+    val onSelectedColor = if (bottomBarColorIndex == 0) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        if (isDark) preset.darkOnSelected else preset.lightOnSelected
+    }
+    
+    val unselectedColor = if (bottomBarColorIndex == 0) {
+        Color(0xFF767482)
+    } else {
+        if (isDark) preset.darkUnselected else preset.lightUnselected
+    }
+    
+    val selectedContainerColor = if (bottomBarColorIndex == 0) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        if (isDark) preset.darkSelectedContainer else preset.lightSelectedContainer
+    }
+
     Surface(
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        color = Color.White,
+        color = barColor,
         shadowElevation = 12.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -1987,6 +2288,9 @@ fun CustomBottomBar(
                 icon = Icons.Outlined.Settings,
                 selectedIcon = Icons.Filled.Settings,
                 label = "الإعدادات",
+                onSelectedColor = onSelectedColor,
+                unselectedColor = unselectedColor,
+                selectedContainerColor = selectedContainerColor,
                 onClick = { onTabSelected(DashboardTab.Settings) }
             )
 
@@ -1997,6 +2301,9 @@ fun CustomBottomBar(
                     icon = Icons.Outlined.Construction,
                     selectedIcon = Icons.Filled.Construction,
                     label = "الأدوات",
+                    onSelectedColor = onSelectedColor,
+                    unselectedColor = unselectedColor,
+                    selectedContainerColor = selectedContainerColor,
                     onClick = { onTabSelected(DashboardTab.Tools) }
                 )
             }
@@ -2007,6 +2314,9 @@ fun CustomBottomBar(
                 icon = Icons.Outlined.Folder,
                 selectedIcon = Icons.Filled.Folder,
                 label = "المجلدات",
+                onSelectedColor = onSelectedColor,
+                unselectedColor = unselectedColor,
+                selectedContainerColor = selectedContainerColor,
                 onClick = { onTabSelected(DashboardTab.Folders) }
             )
 
@@ -2016,6 +2326,9 @@ fun CustomBottomBar(
                 icon = Icons.Outlined.Home,
                 selectedIcon = Icons.Filled.Home,
                 label = "الرئيسية",
+                onSelectedColor = onSelectedColor,
+                unselectedColor = unselectedColor,
+                selectedContainerColor = selectedContainerColor,
                 onClick = { onTabSelected(DashboardTab.Home) }
             )
         }
@@ -2028,6 +2341,9 @@ fun BottomTabItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
+    onSelectedColor: Color,
+    unselectedColor: Color,
+    selectedContainerColor: Color,
     onClick: () -> Unit
 ) {
     Column(
@@ -2044,7 +2360,7 @@ fun BottomTabItem(
             modifier = Modifier
                 .size(width = 48.dp, height = 28.dp)
                 .background(
-                    if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                    if (selected) selectedContainerColor else Color.Transparent,
                     RoundedCornerShape(16.dp)
                 ),
             contentAlignment = Alignment.Center
@@ -2052,7 +2368,7 @@ fun BottomTabItem(
             Icon(
                 imageVector = if (selected) selectedIcon else icon,
                 contentDescription = label,
-                tint = if (selected) MaterialTheme.colorScheme.primary else Color(0xFF767482),
+                tint = if (selected) onSelectedColor else unselectedColor,
                 modifier = Modifier.size(20.dp)
             )
         }
@@ -2061,7 +2377,7 @@ fun BottomTabItem(
             text = label,
             fontSize = 11.sp,
             fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium,
-            color = if (selected) MaterialTheme.colorScheme.primary else Color(0xFF767482)
+            color = if (selected) onSelectedColor else unselectedColor
         )
     }
 }

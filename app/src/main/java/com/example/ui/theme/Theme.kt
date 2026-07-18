@@ -21,7 +21,9 @@ private val DarkColorScheme =
     primaryContainer = Color(0xFF2A283E),
     onPrimaryContainer = Color(0xFFE6E0FF),
     onBackground = Color(0xFFE6E0FF),
-    onSurface = Color(0xFFE6E0FF)
+    onSurface = Color(0xFFE6E0FF),
+    surfaceVariant = Color(0xFF2E2C3F),
+    onSurfaceVariant = Color(0xFFBBB8CF)
   )
 
 private val LightColorScheme =

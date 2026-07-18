@@ -111,7 +111,9 @@ data class PdfUiState(
     val starredPdfs: Set<String> = emptySet(),
     val allPdfFiles: List<LocalPdfFile> = emptyList(),
     val showToolsTab: Boolean = true,
-    val storageInfo: StorageInfo = StorageInfo()
+    val storageInfo: StorageInfo = StorageInfo(),
+    val appTheme: String = "system", // "system", "light", "dark"
+    val bottomBarColorIndex: Int = 0 // 0 to 11
 )
 
 class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
@@ -171,12 +173,23 @@ class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
 
     fun setScrollMode(mode: String) {
         _uiState.update { it.copy(scrollMode = mode) }
-        val jsVal = if (mode == "horizontal") 1 else 0
-        sendJsCommand("PDFViewerApplication.pdfViewer.scrollMode = $jsVal")
+        val jsVal = if (_uiState.value.snapToPage) {
+            3
+        } else {
+            if (mode == "horizontal") 1 else 0
+        }
+        sendJsCommand("if (typeof PDFViewerApplication !== 'undefined' && PDFViewerApplication.pdfViewer) { PDFViewerApplication.pdfViewer.scrollMode = $jsVal; }")
     }
 
     fun setSnapToPage(snap: Boolean) {
         _uiState.update { it.copy(snapToPage = snap) }
+        val mode = _uiState.value.scrollMode
+        val jsVal = if (snap) {
+            3
+        } else {
+            if (mode == "horizontal") 1 else 0
+        }
+        sendJsCommand("if (typeof PDFViewerApplication !== 'undefined' && PDFViewerApplication.pdfViewer) { PDFViewerApplication.pdfViewer.scrollMode = $jsVal; }")
     }
 
     fun setAutoHideToolbar(autoHide: Boolean) {
@@ -427,6 +440,8 @@ class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
         val prefs = context.getSharedPreferences("pdf_reader_prefs", Context.MODE_PRIVATE)
         val completed = prefs.getBoolean("welcome_completed", false)
         val showTools = prefs.getBoolean("show_tools_tab", true)
+        val theme = prefs.getString("app_theme", "system") ?: "system"
+        val bottomBarColorIdx = prefs.getInt("bottom_bar_color_index", 0)
         
         val starredSet = prefs.getStringSet("starred_pdfs", emptySet()) ?: emptySet()
         
@@ -438,6 +453,8 @@ class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
                 welcomeCompleted = completed,
                 showToolsTab = showTools,
                 starredPdfs = starredSet,
+                appTheme = theme,
+                bottomBarColorIndex = bottomBarColorIdx,
                 currentScreen = nextScreen
             )
         }
@@ -446,6 +463,18 @@ class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
         
         // Scan for local PDF files and populate cache
         scanFiles(context)
+    }
+
+    fun setAppTheme(context: Context, theme: String) {
+        val prefs = context.getSharedPreferences("pdf_reader_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("app_theme", theme).apply()
+        _uiState.update { it.copy(appTheme = theme) }
+    }
+
+    fun setBottomBarColorIndex(context: Context, index: Int) {
+        val prefs = context.getSharedPreferences("pdf_reader_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putInt("bottom_bar_color_index", index).apply()
+        _uiState.update { it.copy(bottomBarColorIndex = index) }
     }
     
     fun completeWelcome(context: Context) {

@@ -33,13 +33,19 @@ class MainActivity : ComponentActivity() {
     viewModel.initialize(applicationContext)
 
     setContent {
-      MyApplicationTheme {
+      val state by viewModel.uiState.collectAsState()
+      val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+      val isDark = when (state.appTheme) {
+        "dark" -> true
+        "light" -> false
+        else -> systemDark
+      }
+
+      MyApplicationTheme(darkTheme = isDark, dynamicColor = false) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-          val state by viewModel.uiState.collectAsState()
-
           when (state.currentScreen) {
             Screen.Welcome -> {
               com.example.ui.WelcomeScreen(viewModel = viewModel)

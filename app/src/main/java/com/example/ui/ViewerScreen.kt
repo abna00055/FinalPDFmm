@@ -828,7 +828,7 @@ fun PdfWebView(
 
                                             // Apply current UI states
                                             window.applyTheme('${state.readingTheme}');
-                                            PDFViewerApplication.pdfViewer.scrollMode = ${if (state.scrollMode == "horizontal") 1 else 0};
+                                            PDFViewerApplication.pdfViewer.scrollMode = ${if (state.snapToPage) 3 else if (state.scrollMode == "horizontal") 1 else 0};
 
                                             // 4. Initialise page to saved state
                                             var initialPage = ${state.currentPage};
