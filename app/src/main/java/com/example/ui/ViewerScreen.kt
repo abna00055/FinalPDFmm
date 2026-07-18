@@ -14,6 +14,7 @@ import android.print.PrintDocumentAdapter
 import android.print.PrintAttributes
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
@@ -108,6 +109,105 @@ fun ViewerScreen(
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var isBarsVisible by remember { mutableStateOf(true) }
 
+    var activeAudioUrl by remember { mutableStateOf<String?>(null) }
+    var audioWordName by remember { mutableStateOf("") }
+    var isAudioPlaying by remember { mutableStateOf(false) }
+    var isAudioLoading by remember { mutableStateOf(false) }
+
+    val mediaPlayer = remember { android.media.MediaPlayer() }
+
+    fun extractWordFromUrl(url: String): String {
+        try {
+            val uri = Uri.parse(url)
+            val lastSegment = uri.lastPathSegment ?: return "نطق الكلمة"
+            val cleanName = if (lastSegment.contains(".")) {
+                lastSegment.substringBeforeLast(".")
+            } else {
+                lastSegment
+            }
+            val decoded = Uri.decode(cleanName)
+            return decoded.replace("_", " ").replace("-", " ").trim()
+        } catch (e: Exception) {
+            return "نطق الكلمة"
+        }
+    }
+
+    fun playAudio(url: String) {
+        try {
+            activeAudioUrl = url
+            audioWordName = extractWordFromUrl(url)
+            isAudioLoading = true
+            isAudioPlaying = false
+
+            mediaPlayer.reset()
+            mediaPlayer.setDataSource(context, Uri.parse(url))
+            
+            mediaPlayer.setOnPreparedListener { mp ->
+                isAudioLoading = false
+                isAudioPlaying = true
+                mp.start()
+            }
+            
+            mediaPlayer.setOnCompletionListener {
+                isAudioPlaying = false
+            }
+            
+            mediaPlayer.setOnErrorListener { mp, what, extra ->
+                isAudioLoading = false
+                isAudioPlaying = false
+                Toast.makeText(context, "تعذر تشغيل الصوت. قد يكون الرابط غير صالح أو لا يوجد اتصال بالإنترنت.", Toast.LENGTH_LONG).show()
+                true
+            }
+            
+            mediaPlayer.prepareAsync()
+        } catch (e: Exception) {
+            isAudioLoading = false
+            isAudioPlaying = false
+            Toast.makeText(context, "خطأ أثناء تشغيل الصوت: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun replayAudio() {
+        try {
+            if (activeAudioUrl != null) {
+                if (!mediaPlayer.isPlaying) {
+                    mediaPlayer.seekTo(0)
+                    mediaPlayer.start()
+                    isAudioPlaying = true
+                } else {
+                    mediaPlayer.seekTo(0)
+                }
+            }
+        } catch (e: Exception) {
+            activeAudioUrl?.let { playAudio(it) }
+        }
+    }
+
+    fun stopAndDismissAudio() {
+        try {
+            if (mediaPlayer.isPlaying) {
+                mediaPlayer.stop()
+            }
+            mediaPlayer.reset()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        activeAudioUrl = null
+        isAudioPlaying = false
+        isAudioLoading = false
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                mediaPlayer.stop()
+                mediaPlayer.release()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     // Dynamic scale initialization on load
     LaunchedEffect(state.currentPdfPath) {
         state.currentPdfPath?.let { path ->
@@ -188,6 +288,7 @@ fun ViewerScreen(
                     viewModel = viewModel,
                     onWebViewCreated = { webViewRef = it },
                     onSingleTap = { isBarsVisible = !isBarsVisible },
+                    onAudioLinkClicked = { url -> playAudio(url) },
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
@@ -603,6 +704,20 @@ fun ViewerScreen(
                     }
                 }
             }
+
+            // FLOATING MINI PLAYER OVERLAY
+            if (activeAudioUrl != null) {
+                MiniPlayerOverlay(
+                    wordName = audioWordName,
+                    isPlaying = isAudioPlaying,
+                    isLoading = isAudioLoading,
+                    onReplay = { replayAudio() },
+                    onDismiss = { stopAndDismissAudio() },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = if (isBarsVisible) 110.dp else 24.dp)
+                )
+            }
         }
     }
 }
@@ -613,6 +728,7 @@ fun PdfWebView(
     viewModel: PdfViewModel,
     onWebViewCreated: (WebView) -> Unit,
     onSingleTap: () -> Unit,
+    onAudioLinkClicked: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -642,6 +758,44 @@ fun PdfWebView(
                 }
 
                 webViewClient = object : WebViewClient() {
+                    @Deprecated("Deprecated in Java")
+                    override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                        if (url == null) return false
+                        val isAudio = url.contains(".mp3", ignoreCase = true) ||
+                                      url.contains(".wav", ignoreCase = true) ||
+                                      url.contains(".ogg", ignoreCase = true) ||
+                                      url.contains(".m4a", ignoreCase = true) ||
+                                      url.contains("/audio/", ignoreCase = true) ||
+                                      url.contains("/sounds/", ignoreCase = true) ||
+                                      url.contains("/pronunciation/", ignoreCase = true) ||
+                                      url.contains("audio_url=", ignoreCase = true)
+                        if (isAudio) {
+                            onAudioLinkClicked(url)
+                            return true
+                        }
+                        return false
+                    }
+
+                    override fun shouldOverrideUrlLoading(
+                        view: WebView?,
+                        request: android.webkit.WebResourceRequest?
+                    ): Boolean {
+                        val url = request?.url?.toString() ?: return false
+                        val isAudio = url.contains(".mp3", ignoreCase = true) ||
+                                      url.contains(".wav", ignoreCase = true) ||
+                                      url.contains(".ogg", ignoreCase = true) ||
+                                      url.contains(".m4a", ignoreCase = true) ||
+                                      url.contains("/audio/", ignoreCase = true) ||
+                                      url.contains("/sounds/", ignoreCase = true) ||
+                                      url.contains("/pronunciation/", ignoreCase = true) ||
+                                      url.contains("audio_url=", ignoreCase = true)
+                        if (isAudio) {
+                            onAudioLinkClicked(url)
+                            return true
+                        }
+                        return false
+                    }
+
                     override fun onPageFinished(view: WebView?, url: String?) {
                         super.onPageFinished(view, url)
                         // Script to establish bridge listeners, remove PDF.js toolbar, and sync state
@@ -826,6 +980,28 @@ fun PdfWebView(
                                                 AndroidBridge.onSingleTap();
                                             });
 
+                                            // Capture-phase link interceptor to prevent WebView navigation for audio URLs
+                                            document.addEventListener('click', function(e) {
+                                                var anchor = e.target.closest('a');
+                                                if (anchor && anchor.href) {
+                                                    var url = anchor.href;
+                                                    var isAudio = url.toLowerCase().indexOf('.mp3') !== -1 || 
+                                                                  url.toLowerCase().indexOf('.wav') !== -1 || 
+                                                                  url.toLowerCase().indexOf('.ogg') !== -1 || 
+                                                                  url.toLowerCase().indexOf('.m4a') !== -1 || 
+                                                                  url.toLowerCase().indexOf('/audio/') !== -1 || 
+                                                                  url.toLowerCase().indexOf('/sounds/') !== -1 || 
+                                                                  url.toLowerCase().indexOf('/pronunciation/') !== -1 || 
+                                                                  url.toLowerCase().indexOf('audio_url=') !== -1;
+                                                    if (isAudio) {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        AndroidBridge.onAudioLinkClicked(url);
+                                                        return false;
+                                                    }
+                                                }
+                                            }, true);
+
                                             // Apply current UI states
                                             window.applyTheme('${state.readingTheme}');
                                             PDFViewerApplication.pdfViewer.scrollMode = ${if (state.snapToPage) 3 else if (state.scrollMode == "horizontal") 1 else 0};
@@ -852,6 +1028,13 @@ fun PdfWebView(
                     fun onSingleTap() {
                         coroutineScope.launch {
                             onSingleTap()
+                        }
+                    }
+
+                    @android.webkit.JavascriptInterface
+                    fun onAudioLinkClicked(url: String) {
+                        coroutineScope.launch {
+                            onAudioLinkClicked(url)
                         }
                     }
 
@@ -2537,6 +2720,119 @@ fun DocumentNavigationSheet(
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MiniPlayerOverlay(
+    wordName: String,
+    isPlaying: Boolean,
+    isLoading: Boolean,
+    onReplay: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .padding(horizontal = 16.dp, vertical = 24.dp)
+            .widthIn(max = 400.dp)
+            .testTag("audio_mini_player"),
+        shape = RoundedCornerShape(24.dp),
+        color = Color(0xFF1C1B26), // Premium dark theme background for the mini player
+        border = BorderStroke(1.dp, Color(0xFF7C5CFF).copy(alpha = 0.4f)), // Glowing violet outline
+        shadowElevation = 12.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Left side: Icon & Word Info
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                // Animated or pulsing audio icon
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(Color(0xFF2A283E), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.VolumeUp else Icons.Default.VolumeMute,
+                        contentDescription = null,
+                        tint = Color(0xFFB19DFF), // Glowing Lavender
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                Column {
+                    Text(
+                        text = "جاري النطق...",
+                        fontSize = 10.sp,
+                        color = Color(0xFFBBB8CF),
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = wordName.ifEmpty { "كلمة غير معروفة" },
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            // Right side: Action controls (Replay & Dismiss)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Replay/Play Button
+                IconButton(
+                    onClick = onReplay,
+                    enabled = !isLoading,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(Color(0xFF2A283E), CircleShape)
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            color = Color(0xFFB19DFF),
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Replay,
+                            contentDescription = "إعادة النطق",
+                            tint = Color(0xFFB19DFF),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                // Delete/Dismiss Button
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(Color(0xFFFFEBEE).copy(alpha = 0.1f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "حذف المشغل",
+                        tint = Color(0xFFFF8A80),
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
         }
