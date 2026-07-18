@@ -638,14 +638,21 @@ class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
                             "B1_Wortschatz.pdf",
                             "CamScanner_2025-11-09.pdf"
                         )
-                        val folderName = if (isPrebuilt) "ملفات تجريبية" else "مستندات مستوردة"
+                        if (isPrebuilt) {
+                            try {
+                                file.delete()
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                            return@forEach
+                        }
                         
                         filesList.add(
                             LocalPdfFile(
                                 filePath = file.absolutePath,
                                 fileName = file.name.replace(".pdf", "", ignoreCase = true).replace("_", " "),
                                 fileSize = sizeStr,
-                                folderName = folderName,
+                                folderName = "مستندات مستوردة",
                                 lastModified = file.lastModified(),
                                 isFavorite = isFav
                             )
@@ -656,54 +663,22 @@ class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
                 e.printStackTrace()
             }
             
-            // 4. Fallback: If list is still empty and we do NOT have permission, populate sample files
-            if (filesList.isEmpty() && !hasPermission) {
-                val prebuiltFiles = listOf(
-                    "Hören_&_Sprechen_A2.pdf" to "8.1 MB",
-                    "Netzwerk_Neu_A2_Übungsbuch.pdf" to "29.0 MB",
-                    "NWn_A2_Glossar_Arabisch.pdf" to "4.9 MB",
-                    "B1_Wortschatz.pdf" to "5.0 MB",
-                    "CamScanner_2025-11-09.pdf" to "7.5 MB"
-                )
-                
-                for ((name, size) in prebuiltFiles) {
-                    val file = File(context.cacheDir, name)
-                    if (!file.exists()) {
-                        try {
-                            context.assets.open("pdfjs/web/compressed.tracemonkey-pldi-09.pdf").use { input ->
-                                file.outputStream().use { output ->
-                                    input.copyTo(output)
-                                }
-                            }
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                    }
-                    
-                    val isFav = _uiState.value.starredPdfs.contains(file.absolutePath)
-                    val folder = when (name) {
-                        "CamScanner_2025-11-09.pdf" -> "Download"
-                        "Hören_&_Sprechen_A2.pdf" -> "WhatsApp"
-                        "Netzwerk_Neu_A2_Übungsbuch.pdf" -> "WhatsApp Business"
-                        else -> "ملفات تجريبية"
-                    }
-                    
-                    filesList.add(
-                        LocalPdfFile(
-                            filePath = file.absolutePath,
-                            fileName = name.replace(".pdf", "", ignoreCase = true).replace("_", " "),
-                            fileSize = size,
-                            folderName = folder,
-                            lastModified = file.lastModified(),
-                            isFavorite = isFav
-                        )
-                    )
-                }
-            }
-            
-            // 5. Update state
+            // 5. Update state and filter out any remaining mock/sample/test/assets files
             val finalFiles = filesList.map {
                 it.copy(isFavorite = _uiState.value.starredPdfs.contains(it.filePath))
+            }.filter { file ->
+                val lowerName = file.fileName.lowercase()
+                val lowerFolder = file.folderName.lowercase()
+                val isSampleOrTest = lowerName.contains("sample") || lowerName.contains("test") ||
+                        lowerName.contains("تجريبي") || lowerName.contains("تجريبية")
+                val isAssetsFolder = lowerFolder == "assets" || lowerFolder == "ملفات تجريبية"
+                val isPrebuilt = file.filePath.contains("Hören_&_Sprechen_A2") ||
+                        file.filePath.contains("Netzwerk_Neu_A2") ||
+                        file.filePath.contains("NWn_A2_Glossar") ||
+                        file.filePath.contains("B1_Wortschatz") ||
+                        file.filePath.contains("CamScanner_2025")
+                
+                !isSampleOrTest && !isAssetsFolder && !isPrebuilt
             }
             
             _uiState.update { 

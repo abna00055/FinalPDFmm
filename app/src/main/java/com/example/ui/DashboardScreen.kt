@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -49,6 +50,11 @@ fun DashboardScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     val recentPdfs by viewModel.recentPdfs.collectAsState(initial = emptyList())
+
+    // Back handler to return to the Home/Main tab from other tabs
+    BackHandler(enabled = uiState.selectedTab != DashboardTab.Home) {
+        viewModel.setTab(DashboardTab.Home)
+    }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -373,7 +379,7 @@ fun PdfGridItem(
 ) {
     Card(
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -428,7 +434,7 @@ fun PdfGridItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
-                    color = Color(0xFF1C1B22)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -469,7 +475,7 @@ fun PdfListItem(
 ) {
     Card(
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -504,7 +510,7 @@ fun PdfListItem(
                     text = file.fileName,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1C1B22),
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -598,6 +604,11 @@ fun FoldersTabScreen(
     // Tracks which folder is expanded to show its PDFs inside the folders tab
     var expandedFolder by remember { mutableStateOf<String?>(null) }
 
+    // Intercept back button when inside a folder to return to the folder list
+    BackHandler(enabled = expandedFolder != null) {
+        expandedFolder = null
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -652,7 +663,7 @@ fun FoldersTabScreen(
                     item {
                         Card(
                             shape = RoundedCornerShape(14.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -685,7 +696,7 @@ fun FoldersTabScreen(
                                         text = folderName,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF1C1B22)
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
@@ -725,7 +736,7 @@ fun FoldersTabScreen(
                     text = expandedFolder ?: "",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1C1B22)
+                    color = MaterialTheme.colorScheme.onBackground
                 )
             }
 
@@ -783,7 +794,7 @@ fun ToolsTabScreen(viewModel: PdfViewModel) {
             text = "أدوات الـ PDF المتقدمة",
             fontSize = 20.sp,
             fontWeight = FontWeight.ExtraBold,
-            color = Color(0xFF1C1B22),
+            color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(bottom = 4.dp)
         )
         Text(
@@ -938,7 +949,7 @@ fun ToolGridCard(
 ) {
     Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = modifier
             .height(135.dp)
@@ -960,7 +971,7 @@ fun ToolGridCard(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = Color(0xFF1C1B22),
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -970,7 +981,7 @@ fun ToolGridCard(
                     text = title,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1C1B22)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
@@ -1004,7 +1015,7 @@ fun SettingsTabScreen(
         // App Header Branding Card
         Card(
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
             modifier = Modifier
                 .fillMaxWidth()
@@ -1038,7 +1049,7 @@ fun SettingsTabScreen(
                             text = "قارئ الـ PDF المحترف",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF1C1B22)
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Box(
@@ -1075,7 +1086,7 @@ fun SettingsTabScreen(
             item {
                 Card(
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -1099,7 +1110,7 @@ fun SettingsTabScreen(
             item {
                 Card(
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -1142,7 +1153,7 @@ fun SettingsTabScreen(
             item {
                 Card(
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -1203,7 +1214,7 @@ fun SettingsSwitchRow(
             }
             Spacer(modifier = Modifier.width(14.dp))
             Column {
-                Text(text = title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1C1B22))
+                Text(text = title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(text = subtitle, fontSize = 10.sp, color = Color.Gray, lineHeight = 13.sp)
             }
@@ -1245,7 +1256,7 @@ fun SettingsSelectionRow(
                 Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
             }
             Spacer(modifier = Modifier.width(14.dp))
-            Text(text = title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1C1B22))
+            Text(text = title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {

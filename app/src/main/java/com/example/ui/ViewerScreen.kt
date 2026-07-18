@@ -176,6 +176,7 @@ fun ViewerScreen(
                     pdfPath = state.currentPdfPath!!,
                     viewModel = viewModel,
                     onWebViewCreated = { webViewRef = it },
+                    onSingleTap = { isBarsVisible = !isBarsVisible },
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
@@ -600,6 +601,7 @@ fun PdfWebView(
     pdfPath: String,
     viewModel: PdfViewModel,
     onWebViewCreated: (WebView) -> Unit,
+    onSingleTap: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -804,6 +806,15 @@ fun PdfWebView(
                                                 }
                                             }, { passive: true });
 
+                                            // 5. Setup click listener for single tap bar toggling
+                                            document.addEventListener('click', function(e) {
+                                                var interactive = e.target.closest('a, button, input, select, textarea, .internalLink');
+                                                if (interactive) {
+                                                    return;
+                                                }
+                                                AndroidBridge.onSingleTap();
+                                            });
+
                                             // Apply current UI states
                                             window.applyTheme('${state.readingTheme}');
                                             PDFViewerApplication.pdfViewer.scrollMode = ${if (state.scrollMode == "horizontal") 1 else 0};
@@ -826,6 +837,13 @@ fun PdfWebView(
                 }
 
                 addJavascriptInterface(object {
+                    @android.webkit.JavascriptInterface
+                    fun onSingleTap() {
+                        coroutineScope.launch {
+                            onSingleTap()
+                        }
+                    }
+
                     @android.webkit.JavascriptInterface
                     fun onPageChanged(pageNumber: Int, pagesCount: Int) {
                         coroutineScope.launch {
