@@ -346,7 +346,15 @@ class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
     }
 
     fun setScreenOrientation(context: Context, orientation: Int) {
-        val activity = context as? android.app.Activity
+        var currentContext = context
+        var activity: android.app.Activity? = null
+        while (currentContext is android.content.ContextWrapper) {
+            if (currentContext is android.app.Activity) {
+                activity = currentContext
+                break
+            }
+            currentContext = currentContext.baseContext
+        }
         activity?.requestedOrientation = orientation
         _uiState.update { it.copy(screenOrientation = orientation) }
     }

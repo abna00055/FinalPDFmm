@@ -31,6 +31,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import android.graphics.Bitmap
+import android.graphics.pdf.PdfRenderer
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -55,6 +65,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.content.res.Configuration
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
@@ -72,7 +88,8 @@ enum class BottomSheetType {
     JumpToPage,
     DocumentInfo,
     Bookmarks,
-    AutoScroll
+    AutoScroll,
+    DocumentNavigation
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -170,26 +187,41 @@ fun ViewerScreen(
                 }
             }
 
-            // FLOATING TOP BAR WITH STATUS BAR BACKDROP (GLASSMORPHIC SOLID BAR)
+            // ALWAYS-ON STATUS BAR DIMMED BACKDROP LAYER
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
+                    .background(Color.Black.copy(alpha = 0.65f))
+                    .align(Alignment.TopCenter)
+            )
+
+            // FLOATING TOP BAR WITH STATUS BAR BACKDROP (CAPSULE/DYNAMIC ISLAND STYLE)
             AnimatedVisibility(
                 visible = isBarsVisible,
                 enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .widthIn(max = 480.dp)
             ) {
                 Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                    shadowElevation = 6.dp,
-                    tonalElevation = 4.dp
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp),
+                    shape = RoundedCornerShape(27.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                    shadowElevation = 8.dp,
+                    tonalElevation = 6.dp
                 ) {
-                    Column(
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .statusBarsPadding()
-                            .padding(bottom = 10.dp)
+                            .fillMaxSize()
+                            .padding(horizontal = 8.dp),
+                        contentAlignment = Alignment.Center
                     ) {
                         if (state.isSearchActive) {
                             NativeSearchBar(
@@ -197,91 +229,92 @@ fun ViewerScreen(
                                 state = state,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                                    .padding(horizontal = 6.dp)
                             )
                         } else {
                             val fileName = state.currentPdfName ?: "عرض ملف PDF"
-                            // Shrink text size based on length of filename
                             val fileNameFontSize = when {
-                                fileName.length > 35 -> 11.sp
-                                fileName.length > 20 -> 13.sp
-                                else -> 15.sp
+                                fileName.length > 30 -> 11.sp
+                                fileName.length > 18 -> 12.sp
+                                else -> 14.sp
                             }
 
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 6.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                IconButton(
-                                    onClick = { viewModel.goBackToDashboard() },
-                                    modifier = Modifier.testTag("viewer_back_btn")
+                                // Left Section: Compact Actions
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "رجوع",
-                                        tint = MaterialTheme.colorScheme.onSurface
-                                    )
+                                    IconButton(
+                                        onClick = {
+                                            state.currentPdfPath?.let { path ->
+                                                sharePdf(context, path, fileName)
+                                            }
+                                        },
+                                        modifier = Modifier.size(38.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Share,
+                                            contentDescription = "مشاركة",
+                                            tint = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+
+                                    IconButton(
+                                        onClick = { viewModel.openSearch() },
+                                        modifier = Modifier.size(38.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Search,
+                                            contentDescription = "البحث",
+                                            tint = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+
+                                    IconButton(
+                                        onClick = { activeSheet = BottomSheetType.DocumentNavigation },
+                                        modifier = Modifier.size(38.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.MenuBook,
+                                            contentDescription = "تصفح المستند",
+                                            tint = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
 
-                                Spacer(modifier = Modifier.width(4.dp))
-
+                                // Centered Title text
                                 Text(
                                     text = fileName,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = fileNameFontSize,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Visible,
-                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(horizontal = 8.dp),
                                     color = MaterialTheme.colorScheme.onSurface,
                                     textAlign = TextAlign.Center
                                 )
 
-                                Spacer(modifier = Modifier.width(4.dp))
-
-                                val isBookmarked = state.bookmarkedPages.contains(state.currentPage)
+                                // Right Section: Back Arrow
                                 IconButton(
-                                    onClick = { viewModel.toggleBookmark(context, state.currentPage) }
+                                    onClick = { viewModel.goBackToDashboard() },
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .testTag("viewer_back_btn")
                                 ) {
                                     Icon(
-                                        imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                                        contentDescription = "إشارة مرجعية",
-                                        tint = if (isBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.width(4.dp))
-
-                                IconButton(
-                                    onClick = {
-                                        viewModel.openSearch()
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Search,
-                                        contentDescription = "البحث",
-                                        tint = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.width(4.dp))
-
-                                IconButton(
-                                    onClick = {
-                                        state.currentPdfPath?.let { path ->
-                                            sharePdf(context, path, fileName)
-                                        }
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Share,
-                                        contentDescription = "مشاركة",
-                                        tint = MaterialTheme.colorScheme.onSurface
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "رجوع",
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
                             }
@@ -317,7 +350,9 @@ fun ViewerScreen(
                 visible = isBarsVisible,
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-                modifier = Modifier.align(Alignment.BottomCenter)
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .widthIn(max = 480.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -326,180 +361,233 @@ fun ViewerScreen(
                         .fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Sleek circular-dock style Bottom bar
+                    // Sleek circular-dock style Bottom bar with 6 beautifully labeled items
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("native_bottom_bar"),
                         shape = RoundedCornerShape(28.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                         tonalElevation = 10.dp
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 4.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(horizontal = 6.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
-                            // Left Section (3 items)
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                horizontalArrangement = Arrangement.SpaceEvenly,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(
-                                    onClick = { activeSheet = BottomSheetType.MoreOptions },
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.MoreHoriz,
-                                        contentDescription = "المزيد",
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                                IconButton(
-                                    onClick = { activeSheet = BottomSheetType.DisplaySettings },
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.BrightnessMedium,
-                                        contentDescription = "المظهر",
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                                IconButton(
-                                    onClick = { viewModel.triggerZoomOut() },
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ZoomOut,
-                                        contentDescription = "تصغير",
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                            }
+                            val isBookmarked = state.bookmarkedPages.contains(state.currentPage)
 
-                            // Center Page indicator Pill
-                            Button(
-                                onClick = { activeSheet = BottomSheetType.JumpToPage },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                                ),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                modifier = Modifier
-                                    .height(34.dp)
-                                    .widthIn(min = 72.dp)
-                                    .testTag("page_indicator_pill")
-                            ) {
-                                Text(
-                                    text = if (state.totalPages > 0) "${state.currentPage} / ${state.totalPages}" else "${state.currentPage}",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1
-                                )
-                            }
-
-                            // Right Section (3 items)
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                horizontalArrangement = Arrangement.SpaceEvenly,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(
-                                    onClick = { viewModel.triggerZoomIn() },
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ZoomIn,
-                                        contentDescription = "تكبير",
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                                IconButton(
-                                    onClick = { activeSheet = BottomSheetType.ViewOptions },
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = if (state.scrollMode == "horizontal") Icons.Default.ViewCarousel else Icons.Default.ViewStream,
-                                        contentDescription = "خيارات العرض",
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                                IconButton(
-                                    onClick = { activeSheet = BottomSheetType.Bookmarks },
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Bookmarks,
-                                        contentDescription = "الإشارات المضافة",
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                            }
+                            BottomBarItem(
+                                icon = Icons.Default.MenuBook,
+                                label = "الصفحات",
+                                onClick = { activeSheet = BottomSheetType.DocumentNavigation },
+                                modifier = Modifier.weight(1f)
+                            )
+                            BottomBarItem(
+                                icon = if (state.scrollMode == "horizontal") Icons.Default.ViewCarousel else Icons.Default.ViewStream,
+                                label = "العرض",
+                                onClick = { activeSheet = BottomSheetType.ViewOptions },
+                                modifier = Modifier.weight(1f)
+                            )
+                            BottomBarItem(
+                                icon = Icons.Default.ZoomIn,
+                                label = "الزووم",
+                                onClick = { activeSheet = BottomSheetType.ZoomSettings },
+                                modifier = Modifier.weight(1f)
+                            )
+                            BottomBarItem(
+                                icon = Icons.Default.Palette,
+                                label = "السمات",
+                                onClick = { activeSheet = BottomSheetType.DisplaySettings },
+                                modifier = Modifier.weight(1f)
+                            )
+                            BottomBarItem(
+                                icon = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                label = "إشارة",
+                                onClick = { viewModel.toggleBookmark(context, state.currentPage) },
+                                tint = if (isBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f)
+                            )
+                            BottomBarItem(
+                                icon = Icons.Default.MoreHoriz,
+                                label = "أدوات",
+                                onClick = { activeSheet = BottomSheetType.MoreOptions },
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     }
                 }
             }
 
-            // MODAL BOTTOM SHEETS MANAGER
+            // ADAPTIVE SHEETS MANAGER (SIDE SHEET FOR LANDSCAPE, BOTTOM SHEET FOR PORTRAIT)
+            val configuration = LocalConfiguration.current
+            val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
             if (activeSheet != BottomSheetType.None) {
-                ModalBottomSheet(
-                    onDismissRequest = { activeSheet = BottomSheetType.None },
-                    sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    dragHandle = { BottomSheetDefaults.DragHandle() }
-                ) {
-                    when (activeSheet) {
-                        BottomSheetType.MoreOptions -> MoreOptionsSheet(
-                            viewModel = viewModel,
-                            state = state,
-                            onNavigate = { activeSheet = it },
-                            onDismiss = { activeSheet = BottomSheetType.None }
-                        )
-                        BottomSheetType.ViewOptions -> ViewOptionsSheet(
-                            viewModel = viewModel,
-                            state = state,
-                            onDismiss = { activeSheet = BottomSheetType.None }
-                        )
-                        BottomSheetType.DisplaySettings -> DisplaySettingsSheet(
-                            viewModel = viewModel,
-                            state = state,
-                            onDismiss = { activeSheet = BottomSheetType.None }
-                        )
-                        BottomSheetType.ZoomSettings -> ZoomSettingsSheet(
-                            viewModel = viewModel,
-                            state = state,
-                            onDismiss = { activeSheet = BottomSheetType.None }
-                        )
-                        BottomSheetType.JumpToPage -> JumpToPageSheet(
-                            viewModel = viewModel,
-                            state = state,
-                            onDismiss = { activeSheet = BottomSheetType.None }
-                        )
-                        BottomSheetType.DocumentInfo -> DocumentInfoSheet(
-                            viewModel = viewModel,
-                            state = state,
-                            onDismiss = { activeSheet = BottomSheetType.None }
-                        )
-                        BottomSheetType.Bookmarks -> BookmarksSheet(
-                            viewModel = viewModel,
-                            state = state,
-                            onDismiss = { activeSheet = BottomSheetType.None }
-                        )
-                        BottomSheetType.AutoScroll -> AutoScrollSheet(
-                            viewModel = viewModel,
-                            state = state,
-                            onDismiss = { activeSheet = BottomSheetType.None }
-                        )
-                        else -> {}
+                if (isLandscape) {
+                    // Dimmed background backdrop to dismiss on click outside
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.5f))
+                            .clickable { activeSheet = BottomSheetType.None }
+                    )
+
+                    // Left Side sheet panel
+                    AnimatedVisibility(
+                        visible = activeSheet != BottomSheetType.None,
+                        enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
+                        exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut(),
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .fillMaxHeight()
+                            .width(360.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.surface,
+                                shape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)
+                            )
+                            .clickable(enabled = false) { } // Prevent clicks through to background
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .statusBarsPadding()
+                                .navigationBarsPadding()
+                        ) {
+                            // Top close bar for landscape side sheet
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                IconButton(onClick = { activeSheet = BottomSheetType.None }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "إغلاق",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            // Content area
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                            ) {
+                                when (activeSheet) {
+                                    BottomSheetType.MoreOptions -> MoreOptionsSheet(
+                                        viewModel = viewModel,
+                                        state = state,
+                                        onNavigate = { activeSheet = it },
+                                        onDismiss = { activeSheet = BottomSheetType.None }
+                                    )
+                                    BottomSheetType.ViewOptions -> ViewOptionsSheet(
+                                        viewModel = viewModel,
+                                        state = state,
+                                        onDismiss = { activeSheet = BottomSheetType.None }
+                                    )
+                                    BottomSheetType.DisplaySettings -> DisplaySettingsSheet(
+                                        viewModel = viewModel,
+                                        state = state,
+                                        onDismiss = { activeSheet = BottomSheetType.None }
+                                    )
+                                    BottomSheetType.ZoomSettings -> ZoomSettingsSheet(
+                                        viewModel = viewModel,
+                                        state = state,
+                                        onDismiss = { activeSheet = BottomSheetType.None }
+                                    )
+                                    BottomSheetType.JumpToPage -> JumpToPageSheet(
+                                        viewModel = viewModel,
+                                        state = state,
+                                        onDismiss = { activeSheet = BottomSheetType.None }
+                                    )
+                                    BottomSheetType.DocumentInfo -> DocumentInfoSheet(
+                                        viewModel = viewModel,
+                                        state = state,
+                                        onDismiss = { activeSheet = BottomSheetType.None }
+                                    )
+                                    BottomSheetType.Bookmarks -> BookmarksSheet(
+                                        viewModel = viewModel,
+                                        state = state,
+                                        onDismiss = { activeSheet = BottomSheetType.None }
+                                    )
+                                    BottomSheetType.DocumentNavigation -> DocumentNavigationSheet(
+                                        viewModel = viewModel,
+                                        state = state,
+                                        onDismiss = { activeSheet = BottomSheetType.None }
+                                    )
+                                    BottomSheetType.AutoScroll -> AutoScrollSheet(
+                                        viewModel = viewModel,
+                                        state = state,
+                                        onDismiss = { activeSheet = BottomSheetType.None }
+                                    )
+                                    else -> {}
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Portrait bottom sheet
+                    ModalBottomSheet(
+                        onDismissRequest = { activeSheet = BottomSheetType.None },
+                        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        dragHandle = { BottomSheetDefaults.DragHandle() }
+                    ) {
+                        when (activeSheet) {
+                            BottomSheetType.MoreOptions -> MoreOptionsSheet(
+                                viewModel = viewModel,
+                                state = state,
+                                        onNavigate = { activeSheet = it },
+                                onDismiss = { activeSheet = BottomSheetType.None }
+                            )
+                            BottomSheetType.ViewOptions -> ViewOptionsSheet(
+                                viewModel = viewModel,
+                                state = state,
+                                onDismiss = { activeSheet = BottomSheetType.None }
+                            )
+                            BottomSheetType.DisplaySettings -> DisplaySettingsSheet(
+                                viewModel = viewModel,
+                                state = state,
+                                onDismiss = { activeSheet = BottomSheetType.None }
+                            )
+                            BottomSheetType.ZoomSettings -> ZoomSettingsSheet(
+                                viewModel = viewModel,
+                                state = state,
+                                onDismiss = { activeSheet = BottomSheetType.None }
+                            )
+                            BottomSheetType.JumpToPage -> JumpToPageSheet(
+                                viewModel = viewModel,
+                                state = state,
+                                onDismiss = { activeSheet = BottomSheetType.None }
+                            )
+                            BottomSheetType.DocumentInfo -> DocumentInfoSheet(
+                                viewModel = viewModel,
+                                state = state,
+                                onDismiss = { activeSheet = BottomSheetType.None }
+                            )
+                            BottomSheetType.Bookmarks -> BookmarksSheet(
+                                viewModel = viewModel,
+                                state = state,
+                                onDismiss = { activeSheet = BottomSheetType.None }
+                            )
+                            BottomSheetType.DocumentNavigation -> DocumentNavigationSheet(
+                                viewModel = viewModel,
+                                state = state,
+                                onDismiss = { activeSheet = BottomSheetType.None }
+                            )
+                            BottomSheetType.AutoScroll -> AutoScrollSheet(
+                                viewModel = viewModel,
+                                state = state,
+                                onDismiss = { activeSheet = BottomSheetType.None }
+                            )
+                            else -> {}
+                        }
                     }
                 }
             }
@@ -892,6 +980,7 @@ fun MoreOptionsSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp)
             .padding(horizontal = 20.dp)
     ) {
@@ -1012,6 +1101,7 @@ fun ViewOptionsSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp)
             .padding(horizontal = 24.dp)
     ) {
@@ -1162,6 +1252,7 @@ fun ZoomSettingsSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp)
             .padding(horizontal = 24.dp)
     ) {
@@ -1367,6 +1458,7 @@ fun DisplaySettingsSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp)
             .padding(horizontal = 24.dp)
     ) {
@@ -1540,6 +1632,7 @@ fun JumpToPageSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp)
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -1853,6 +1946,7 @@ fun AutoScrollSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp)
             .padding(horizontal = 24.dp)
     ) {
@@ -2078,5 +2172,344 @@ fun printPdf(context: Context, filePath: String, fileName: String) {
         }
     } catch (e: Exception) {
         e.printStackTrace()
+    }
+}
+
+@Composable
+fun BottomBarItem(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
+    isSelected: Boolean = false
+) {
+    Column(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = if (isSelected) MaterialTheme.colorScheme.primary else tint,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (isSelected) MaterialTheme.colorScheme.primary else tint.copy(alpha = 0.8f)
+        )
+    }
+}
+
+@Composable
+fun PdfPageThumbnail(
+    pdfPath: String,
+    pageIndex: Int,
+    modifier: Modifier = Modifier
+) {
+    var bitmap by remember(pdfPath, pageIndex) { mutableStateOf<Bitmap?>(null) }
+    
+    LaunchedEffect(pdfPath, pageIndex) {
+        kotlinx.coroutines.Dispatchers.IO.run {
+            try {
+                val file = File(pdfPath)
+                if (file.exists()) {
+                    val fileDescriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+                    val renderer = PdfRenderer(fileDescriptor)
+                    if (pageIndex >= 0 && pageIndex < renderer.pageCount) {
+                        val page = renderer.openPage(pageIndex)
+                        
+                        val width = 180
+                        val height = 260
+                        val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                        bmp.eraseColor(android.graphics.Color.WHITE)
+                        
+                        page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        bitmap = bmp
+                        page.close()
+                    }
+                    renderer.close()
+                    fileDescriptor.close()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+    
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap!!.asImageBitmap(),
+            contentDescription = "الصفحة ${pageIndex + 1}",
+            modifier = modifier,
+            contentScale = ContentScale.Fit
+        )
+    } else {
+        Box(
+            modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DocumentNavigationSheet(
+    viewModel: PdfViewModel,
+    state: PdfUiState,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    var selectedTab by remember { mutableStateOf(2) } // default to Pages tab
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 550.dp)
+            .navigationBarsPadding()
+    ) {
+        Text(
+            text = "تصفح المستند",
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp,
+            modifier = Modifier
+                .padding(horizontal = 24.dp, vertical = 8.dp)
+                .align(Alignment.CenterHorizontally),
+            textAlign = TextAlign.Center
+        )
+        
+        val tabTitles = listOf(
+            "التفاصيل",
+            "الإشارات (${state.bookmarkedPages.size})",
+            "الصفحات (${state.totalPages})"
+        )
+        
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        ) {
+            tabTitles.forEachIndexed { index, title ->
+                Tab(
+                    selected = selectedTab == index,
+                    onClick = { selectedTab = index },
+                    text = {
+                        Text(
+                            text = title,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        ) {
+            when (selectedTab) {
+                0 -> {
+                    // Details tab
+                    val fileSizeStr = getReadableFileSize(state.currentPdfPath)
+                    val formatVersion = "PDF 1.7"
+                    val securityStr = "مؤمن تلقائياً (غير مشفر)"
+                    val lastOpenedDateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+                    
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 16.dp)
+                    ) {
+                        item { DocInfoRow(label = "اسم الملف", value = state.currentPdfName ?: "غير معروف") }
+                        item { DocInfoRow(label = "حجم الملف", value = fileSizeStr) }
+                        item { DocInfoRow(label = "العدد الفعلي للصفحات", value = "${state.totalPages} صفحات") }
+                        item { DocInfoRow(label = "موقع التخزين", value = state.currentPdfPath ?: "مجلد التطبيق") }
+                        item { DocInfoRow(label = "إصدار التنسيق", value = formatVersion) }
+                        item { DocInfoRow(label = "الأمان والخصوصية", value = securityStr) }
+                        item { DocInfoRow(label = "تاريخ آخر قراءة", value = lastOpenedDateStr) }
+                    }
+                }
+                1 -> {
+                    // Bookmarks tab
+                    val bookmarks = state.bookmarkedPages.toList().sorted()
+                    if (bookmarks.isEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(vertical = 32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.BookmarkBorder,
+                                contentDescription = "فارغ",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.size(56.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "لم يتم إضافة أي إشارات مرجعية بعد",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            contentPadding = PaddingValues(bottom = 16.dp)
+                        ) {
+                            items(bookmarks) { page ->
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                viewModel.sendJsCommand("PDFViewerApplication.pdfViewer.currentPageNumber = $page")
+                                                onDismiss()
+                                            }
+                                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Bookmark,
+                                                contentDescription = "إشارة",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text(
+                                                text = "الصفحة $page",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                        
+                                        IconButton(
+                                            onClick = { viewModel.toggleBookmark(context, page) },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "حذف",
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                2 -> {
+                    // Pages thumbnails grid tab
+                    if (state.totalPages <= 0) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("جاري تحميل الصفحات...")
+                        }
+                    } else {
+                        val lazyGridState = rememberLazyGridState()
+                        
+                        LaunchedEffect(state.currentPage) {
+                            if (state.currentPage in 1..state.totalPages) {
+                                try {
+                                    lazyGridState.animateScrollToItem(state.currentPage - 1)
+                                } catch (e: Exception) {
+                                    // Ignore scroll errors
+                                }
+                            }
+                        }
+
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(3),
+                            state = lazyGridState,
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            contentPadding = PaddingValues(bottom = 24.dp)
+                        ) {
+                            items((1..state.totalPages).toList()) { page ->
+                                val isCurrent = page == state.currentPage
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(
+                                            if (isCurrent) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                            else Color.Transparent
+                                        )
+                                        .border(
+                                            width = if (isCurrent) 2.dp else 1.dp,
+                                            color = if (isCurrent) MaterialTheme.colorScheme.primary
+                                                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                            shape = RoundedCornerShape(12.dp)
+                                        )
+                                        .clickable {
+                                            viewModel.sendJsCommand("PDFViewerApplication.pdfViewer.currentPageNumber = $page")
+                                            onDismiss()
+                                        }
+                                        .padding(6.dp)
+                                ) {
+                                    state.currentPdfPath?.let { path ->
+                                        PdfPageThumbnail(
+                                            pdfPath = path,
+                                            pageIndex = page - 1,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .aspectRatio(0.7f)
+                                                .clip(RoundedCornerShape(8.dp))
+                                        )
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    
+                                    Text(
+                                        text = "$page",
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
