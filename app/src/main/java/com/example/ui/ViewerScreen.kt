@@ -244,6 +244,19 @@ fun ViewerScreen(
 
                         Spacer(modifier = Modifier.width(4.dp))
 
+                        val isBookmarked = state.bookmarkedPages.contains(state.currentPage)
+                        IconButton(
+                            onClick = { viewModel.toggleBookmark(context, state.currentPage) }
+                        ) {
+                            Icon(
+                                imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                contentDescription = "إشارة مرجعية",
+                                tint = if (isBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(4.dp))
+
                         IconButton(
                             onClick = {
                                 state.currentPdfPath?.let { path ->
@@ -310,91 +323,110 @@ fun ViewerScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 6.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceAround,
+                                .padding(horizontal = 4.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // 1. More Menu button
-                            IconButton(onClick = { activeSheet = BottomSheetType.MoreOptions }) {
-                                Icon(
-                                    imageVector = Icons.Default.MoreHoriz,
-                                    contentDescription = "المزيد",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
+                            // Left Section (3 items)
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = { activeSheet = BottomSheetType.MoreOptions },
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.MoreHoriz,
+                                        contentDescription = "المزيد",
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { activeSheet = BottomSheetType.DisplaySettings },
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.BrightnessMedium,
+                                        contentDescription = "المظهر",
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { viewModel.triggerZoomOut() },
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ZoomOut,
+                                        contentDescription = "تصغير",
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
                             }
 
-                            // 2. Dynamic Bookmark button
-                            val isBookmarked = state.bookmarkedPages.contains(state.currentPage)
-                            IconButton(onClick = { viewModel.toggleBookmark(context, state.currentPage) }) {
-                                Icon(
-                                    imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                                    contentDescription = "إشارة مرجعية",
-                                    tint = if (isBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-
-                            // 3. Display Settings button
-                            IconButton(onClick = { activeSheet = BottomSheetType.DisplaySettings }) {
-                                Icon(
-                                    imageVector = Icons.Default.BrightnessMedium,
-                                    contentDescription = "المظهر",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-
-                            // Zoom Out Control
-                            IconButton(onClick = { viewModel.triggerZoomOut() }) {
-                                Icon(
-                                    imageVector = Icons.Default.ZoomOut,
-                                    contentDescription = "تصغير",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-
-                            // 4. Interactive Page indicator
+                            // Center Page indicator Pill
                             Button(
                                 onClick = { activeSheet = BottomSheetType.JumpToPage },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
                                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                                 ),
-                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                 modifier = Modifier
-                                    .height(38.dp)
+                                    .height(34.dp)
+                                    .widthIn(min = 72.dp)
                                     .testTag("page_indicator_pill")
                             ) {
                                 Text(
                                     text = if (state.totalPages > 0) "${state.currentPage} / ${state.totalPages}" else "${state.currentPage}",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
                                 )
                             }
 
-                            // Zoom In Control
-                            IconButton(onClick = { viewModel.triggerZoomIn() }) {
-                                Icon(
-                                    imageVector = Icons.Default.ZoomIn,
-                                    contentDescription = "تكبير",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-
-                            // 5. Scroll layout view mode
-                            IconButton(onClick = { activeSheet = BottomSheetType.ViewOptions }) {
-                                Icon(
-                                    imageVector = if (state.scrollMode == "horizontal") Icons.Default.ViewCarousel else Icons.Default.ViewStream,
-                                    contentDescription = "خيارات العرض",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-
-                            // 7. Bookmarks list
-                            IconButton(onClick = { activeSheet = BottomSheetType.Bookmarks }) {
-                                Icon(
-                                    imageVector = Icons.Default.Bookmarks,
-                                    contentDescription = "الإشارات المضافة",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
+                            // Right Section (3 items)
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = { viewModel.triggerZoomIn() },
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ZoomIn,
+                                        contentDescription = "تكبير",
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { activeSheet = BottomSheetType.ViewOptions },
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (state.scrollMode == "horizontal") Icons.Default.ViewCarousel else Icons.Default.ViewStream,
+                                        contentDescription = "خيارات العرض",
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { activeSheet = BottomSheetType.Bookmarks },
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Bookmarks,
+                                        contentDescription = "الإشارات المضافة",
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -530,8 +562,8 @@ fun PdfWebView(
                                             // Report immediately
                                             reportPageStatus();
 
-                                            // Setup a solid fallback interval to poll page changes every 800ms
-                                            setInterval(reportPageStatus, 800);
+                                            // Setup a solid fallback interval to poll page changes every 400ms
+                                            setInterval(reportPageStatus, 400);
 
                                             // 2. Setup find event listeners to call back search counts
                                             function reportSearchMatches(e) {

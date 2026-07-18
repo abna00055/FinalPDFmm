@@ -520,12 +520,16 @@ class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
             val filesList = mutableListOf<LocalPdfFile>()
             
             // Check storage permission
-            val hasPermission = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.READ_EXTERNAL_STORAGE
-            ) == PackageManager.PERMISSION_GRANTED
+            val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Environment.isExternalStorageManager()
+            } else {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.READ_EXTERNAL_STORAGE
+                ) == PackageManager.PERMISSION_GRANTED
+            }
             
-            if (hasPermission || Build.VERSION.SDK_INT >= 30) {
+            if (hasPermission) {
                 // 1. Scan via MediaStore
                 val contentResolver = context.contentResolver
                 val uri = MediaStore.Files.getContentUri("external")
@@ -644,8 +648,8 @@ class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
                 e.printStackTrace()
             }
             
-            // 4. Fallback: If list is still empty (e.g. no permission, or clean emulator storage), populate sample files
-            if (filesList.isEmpty()) {
+            // 4. Fallback: If list is still empty and we do NOT have permission, populate sample files
+            if (filesList.isEmpty() && !hasPermission) {
                 val prebuiltFiles = listOf(
                     "Hören_&_Sprechen_A2.pdf" to "8.1 MB",
                     "Netzwerk_Neu_A2_Übungsbuch.pdf" to "29.0 MB",

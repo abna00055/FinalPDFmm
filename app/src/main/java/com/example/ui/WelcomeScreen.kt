@@ -1,8 +1,12 @@
 package com.example.ui
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.os.Environment
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,15 +42,30 @@ fun WelcomeScreen(
     val context = LocalContext.current
     var isVisible by remember { mutableStateOf(false) }
 
+    // Launcher for Android 11+ (API 30+) All Files Access Settings activity
+    val manageStorageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { _ ->
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (Environment.isExternalStorageManager()) {
+                Toast.makeText(context, "تم منح إذن الوصول للملفات بنجاح", Toast.LENGTH_SHORT).show()
+                viewModel.completeWelcome(context)
+            } else {
+                Toast.makeText(context, "لم يتم تفعيل الإذن، يرجى منحه لتصفح ملفات جهازك.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    // Launcher for API < 30 standard READ_EXTERNAL_STORAGE permission
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
             Toast.makeText(context, "تم منح إذن الوصول للملفات بنجاح", Toast.LENGTH_SHORT).show()
+            viewModel.completeWelcome(context)
         } else {
-            Toast.makeText(context, "لم يتم منح الإذن. سيتم استخدام ملفات نموذجية.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "لم يتم منح الإذن، يرجى تفعيله لتصفح ملفات جهازك.", Toast.LENGTH_LONG).show()
         }
-        viewModel.completeWelcome(context)
     }
 
     LaunchedEffect(Unit) {
@@ -160,7 +179,22 @@ fun WelcomeScreen(
                 ) {
                     Button(
                         onClick = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                if (Environment.isExternalStorageManager()) {
+                                    viewModel.completeWelcome(context)
+                                } else {
+                                    try {
+                                        val intent = Intent(
+                                            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                            Uri.parse("package:${context.packageName}")
+                                        )
+                                        manageStorageLauncher.launch(intent)
+                                    } catch (e: Exception) {
+                                        val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                                        manageStorageLauncher.launch(intent)
+                                    }
+                                }
+                            } else {
                                 if (ContextCompat.checkSelfPermission(
                                         context,
                                         Manifest.permission.READ_EXTERNAL_STORAGE
@@ -170,8 +204,6 @@ fun WelcomeScreen(
                                 } else {
                                     permissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
                                 }
-                            } else {
-                                viewModel.completeWelcome(context)
                             }
                         },
                         modifier = Modifier
@@ -193,11 +225,14 @@ fun WelcomeScreen(
                     }
 
                     TextButton(
-                        onClick = { viewModel.completeWelcome(context) },
+                        onClick = {
+                            Toast.makeText(context, "تم الدخول باستخدام ملفات تجريبية", Toast.LENGTH_SHORT).show()
+                            viewModel.completeWelcome(context)
+                        },
                         modifier = Modifier.testTag("skip_welcome_btn")
                     ) {
                         Text(
-                            text = "الدخول مباشرة واستخدام منتقي الملفات",
+                            text = "تصفح باستخدام ملفات تجريبية",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.primary
