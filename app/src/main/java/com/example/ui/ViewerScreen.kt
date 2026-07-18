@@ -72,6 +72,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -111,6 +112,16 @@ fun ViewerScreen(
     LaunchedEffect(state.currentPdfPath) {
         state.currentPdfPath?.let { path ->
             viewModel.loadBookmarks(context, path)
+        }
+    }
+
+    // Active reading duration tracker
+    LaunchedEffect(state.currentPdfPath) {
+        if (state.currentPdfPath != null) {
+            while (true) {
+                delay(1000L)
+                viewModel.incrementReadingTime(context, 1L)
+            }
         }
     }
 

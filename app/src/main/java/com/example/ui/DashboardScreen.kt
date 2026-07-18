@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -30,14 +31,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.RecentPdf
+import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import android.graphics.Bitmap
+import android.graphics.pdf.PdfRenderer
+import android.os.ParcelFileDescriptor
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -149,8 +160,11 @@ fun HomeTabScreen(
     val greetingIcon = if (currentHour < 12) Icons.Default.WbSunny else Icons.Default.NightsStay
     val greetingColor = if (currentHour < 12) Color(0xFFFBC02D) else Color(0xFFB19DFF)
 
-    // Filter files based on dashboardSearchQuery and selectedFilter
-    val filteredFiles = remember(uiState.allPdfFiles, uiState.dashboardSearchQuery, uiState.selectedFilter, recentPdfs) {
+    var showSortSheet by remember { mutableStateOf(false) }
+    var showStatsSheet by remember { mutableStateOf(false) }
+
+    // Filter files based on dashboardSearchQuery, selectedFilter, and sortOption
+    val filteredFiles = remember(uiState.allPdfFiles, uiState.dashboardSearchQuery, uiState.selectedFilter, uiState.sortOption, recentPdfs) {
         var list = uiState.allPdfFiles
         
         // Apply search query
@@ -159,14 +173,35 @@ fun HomeTabScreen(
         }
         
         // Apply category filter
-        when (uiState.selectedFilter) {
+        list = when (uiState.selectedFilter) {
             FileFilter.All -> list
             FileFilter.Favorites -> list.filter { it.isFavorite }
             FileFilter.Recent -> {
-                // Map recent paths to local files or use recent pdfs
                 val recentPaths = recentPdfs.map { it.filePath }.toSet()
                 list.filter { recentPaths.contains(it.filePath) }
             }
+        }
+
+        // Helper to parse file size string to bytes for sorting
+        fun getSizeBytes(sizeStr: String): Long {
+            val trimmed = sizeStr.uppercase().trim()
+            val numberPart = trimmed.filter { it.isDigit() || it == '.' }.toDoubleOrNull() ?: 0.0
+            return when {
+                trimmed.contains("GB") -> (numberPart * 1024 * 1024 * 1024).toLong()
+                trimmed.contains("MB") -> (numberPart * 1024 * 1024).toLong()
+                trimmed.contains("KB") -> (numberPart * 1024).toLong()
+                else -> numberPart.toLong()
+            }
+        }
+
+        // Apply sorting
+        when (uiState.sortOption) {
+            SortOption.ALPHA_ASC -> list.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.fileName })
+            SortOption.ALPHA_DESC -> list.sortedWith(compareByDescending(String.CASE_INSENSITIVE_ORDER) { it.fileName })
+            SortOption.SIZE_ASC -> list.sortedBy { getSizeBytes(it.fileSize) }
+            SortOption.SIZE_DESC -> list.sortedByDescending { getSizeBytes(it.fileSize) }
+            SortOption.DATE_ASC -> list.sortedBy { it.lastModified }
+            SortOption.DATE_DESC -> list.sortedByDescending { it.lastModified }
         }
     }
 
@@ -207,45 +242,92 @@ fun HomeTabScreen(
                 )
             }
 
-            // Quick Stats Indicator
-            Box(
-                modifier = Modifier
-                    .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            // Two Premium Header Icons (Stats & Sort)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "${uiState.allPdfFiles.size} ملفات",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                // Statistics Icon Button (Square with chart drawing inside)
+                IconButton(
+                    onClick = { showStatsSheet = true },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Assessment,
+                        contentDescription = "إحصائيات المكتبة",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Sorting Icon Button (3 Vertical Dots)
+                IconButton(
+                    onClick = { showSortSheet = true },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "ترتيب الملفات",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
 
-        // Interactive Search Bar
-        OutlinedTextField(
+        // Compact Interactive Search Bar
+        BasicTextField(
             value = uiState.dashboardSearchQuery,
             onValueChange = { viewModel.setDashboardSearchQuery(it) },
-            placeholder = { Text("ابحث في ملفات الـ PDF...", fontSize = 14.sp) },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "بحث") },
-            trailingIcon = {
-                if (uiState.dashboardSearchQuery.isNotEmpty()) {
-                    IconButton(onClick = { viewModel.setDashboardSearchQuery("") }) {
-                        Icon(Icons.Default.Close, contentDescription = "مسح")
-                    }
-                }
-            },
+            textStyle = TextStyle(fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface),
             singleLine = true,
-            shape = RoundedCornerShape(16.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                unfocusedBorderColor = Color.LightGray.copy(alpha = 0.5f)
-            ),
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("dashboard_search_input")
+                .height(42.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                .padding(horizontal = 12.dp)
+                .testTag("dashboard_search_input"),
+            decorationBox = { innerTextField ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "بحث",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (uiState.dashboardSearchQuery.isEmpty()) {
+                            Text(
+                                text = "ابحث في ملفات الـ PDF...",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                        innerTextField()
+                    }
+                    if (uiState.dashboardSearchQuery.isNotEmpty()) {
+                        IconButton(
+                            onClick = { viewModel.setDashboardSearchQuery("") },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "مسح",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -315,8 +397,16 @@ fun HomeTabScreen(
                         .weight(1f)
                 ) {
                     items(filteredFiles, key = { it.filePath }) { file ->
+                        val recentInfo = recentPdfs.find { it.filePath == file.filePath }
+                        val progressPercent = if (recentInfo != null && recentInfo.totalPages > 0) {
+                            (recentInfo.lastPage.toFloat() / recentInfo.totalPages.toFloat() * 100).toInt().coerceIn(0, 100)
+                        } else null
+                        val lastOpenedText = recentInfo?.let { formatLastOpened(it.lastOpened) }
+
                         PdfGridItem(
                             file = file,
+                            progressPercent = progressPercent,
+                            lastOpenedText = lastOpenedText,
                             onClick = { viewModel.selectPdf(file.filePath, file.fileName) },
                             onToggleFav = { viewModel.toggleFavorite(context, file.filePath) }
                         )
@@ -331,8 +421,16 @@ fun HomeTabScreen(
                         .weight(1f)
                 ) {
                     items(filteredFiles, key = { it.filePath }) { file ->
+                        val recentInfo = recentPdfs.find { it.filePath == file.filePath }
+                        val progressPercent = if (recentInfo != null && recentInfo.totalPages > 0) {
+                            (recentInfo.lastPage.toFloat() / recentInfo.totalPages.toFloat() * 100).toInt().coerceIn(0, 100)
+                        } else null
+                        val lastOpenedText = recentInfo?.let { formatLastOpened(it.lastOpened) }
+
                         PdfListItem(
                             file = file,
+                            progressPercent = progressPercent,
+                            lastOpenedText = lastOpenedText,
                             onClick = { viewModel.selectPdf(file.filePath, file.fileName) },
                             onToggleFav = { viewModel.toggleFavorite(context, file.filePath) }
                         )
@@ -340,6 +438,23 @@ fun HomeTabScreen(
                 }
             }
         }
+    }
+
+    // Modal Bottom Sheets Overlay
+    if (showSortSheet) {
+        SortFilesSheet(
+            sortOption = uiState.sortOption,
+            onSortSelected = { viewModel.setSortOption(it) },
+            onDismiss = { showSortSheet = false }
+        )
+    }
+
+    if (showStatsSheet) {
+        LibraryStatsSheet(
+            uiState = uiState,
+            recentPdfs = recentPdfs,
+            onDismiss = { showStatsSheet = false }
+        )
     }
 }
 
@@ -374,15 +489,18 @@ fun FilterPill(
 @Composable
 fun PdfGridItem(
     file: LocalPdfFile,
+    progressPercent: Int?,
+    lastOpenedText: String?,
     onClick: () -> Unit,
     onToggleFav: () -> Unit
 ) {
     Card(
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = Modifier
             .fillMaxWidth()
+            .height(235.dp)
             .clickable { onClick() }
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -405,61 +523,90 @@ fun PdfGridItem(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.height(12.dp))
-                // PDF Red Icon Container
+                // PDF cover thumbnail with nested progress bar
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
-                        .background(Color(0xFFF1EEFF), CircleShape),
-                    contentAlignment = Alignment.Center
+                        .width(90.dp)
+                        .height(115.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.PictureAsPdf,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(30.dp)
+                    PdfThumbnail(
+                        filePath = file.filePath,
+                        modifier = Modifier.fillMaxSize()
                     )
+                    
+                    // Thin progress line at the bottom of the thumbnail
+                    if (progressPercent != null && progressPercent > 0) {
+                        LinearProgressIndicator(
+                            progress = { progressPercent / 100f },
+                            color = Color(0xFF1E88E5),
+                            trackColor = Color(0xFF1E88E5).copy(alpha = 0.2f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .align(Alignment.BottomCenter)
+                                .clip(RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp))
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // PDF Name
+                // Name of PDF
                 Text(
                     text = file.fileName,
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // Folder & Size Badges
+                // Small badges
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Box(
                         modifier = Modifier
-                            .background(Color(0xFFFFF9C4), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .background(Color(0xFFFFF9C4), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
                     ) {
                         Text(
                             text = file.folderName,
-                            fontSize = 9.sp,
+                            fontSize = 8.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF5D4037)
+                            color = Color(0xFF5D4037),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = file.fileSize,
-                        fontSize = 10.sp,
-                        color = Color.Gray
+                        fontSize = 8.sp,
+                        color = Color.Gray,
+                        maxLines = 1
+                    )
+                }
+                
+                // Reading progress and last opened label
+                if (progressPercent != null && progressPercent > 0) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "قرأت $progressPercent% • $lastOpenedText",
+                        fontSize = 8.sp,
+                        color = Color(0xFF1E88E5),
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -470,11 +617,13 @@ fun PdfGridItem(
 @Composable
 fun PdfListItem(
     file: LocalPdfFile,
+    progressPercent: Int?,
+    lastOpenedText: String?,
     onClick: () -> Unit,
     onToggleFav: () -> Unit
 ) {
     Card(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = Modifier
@@ -484,22 +633,31 @@ fun PdfListItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // PDF Icon
+            // PDF cover thumbnail
             Box(
                 modifier = Modifier
-                    .size(44.dp)
-                    .background(Color(0xFFF1EEFF), RoundedCornerShape(10.dp)),
-                contentAlignment = Alignment.Center
+                    .size(width = 44.dp, height = 58.dp)
+                    .clip(RoundedCornerShape(6.dp))
             ) {
-                Icon(
-                    imageVector = Icons.Default.PictureAsPdf,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp)
+                PdfThumbnail(
+                    filePath = file.filePath,
+                    modifier = Modifier.fillMaxSize()
                 )
+                
+                if (progressPercent != null && progressPercent > 0) {
+                    LinearProgressIndicator(
+                        progress = { progressPercent / 100f },
+                        color = Color(0xFF1E88E5),
+                        trackColor = Color(0xFF1E88E5).copy(alpha = 0.2f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .align(Alignment.BottomCenter)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(12.dp))
@@ -508,44 +666,556 @@ fun PdfListItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = file.fileName,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                
                 Spacer(modifier = Modifier.height(4.dp))
+                
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .background(Color(0xFFFFF9C4), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .background(Color(0xFFFFF9C4), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
                     ) {
                         Text(
                             text = file.folderName,
-                            fontSize = 9.sp,
+                            fontSize = 8.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF5D4037)
                         )
                     }
                     Text(
                         text = file.fileSize,
-                        fontSize = 11.sp,
+                        fontSize = 9.sp,
                         color = Color.Gray
+                    )
+                    
+                    if (lastOpenedText != null) {
+                        Text(
+                            text = lastOpenedText,
+                            fontSize = 9.sp,
+                            color = Color.Gray
+                        )
+                    }
+                }
+
+                // Progress Percentage
+                if (progressPercent != null && progressPercent > 0) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "تمت قراءة $progressPercent%",
+                        fontSize = 9.sp,
+                        color = Color(0xFF1E88E5),
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
 
             // Favorite button
-            IconButton(onClick = onToggleFav) {
+            IconButton(
+                onClick = onToggleFav,
+                modifier = Modifier.size(36.dp)
+            ) {
                 Icon(
                     imageVector = if (file.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
                     contentDescription = "تفضيل",
                     tint = if (file.isFavorite) MaterialTheme.colorScheme.tertiary else Color.Gray.copy(alpha = 0.4f),
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PdfThumbnail(
+    filePath: String,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    var thumbnailPath by remember(filePath) { mutableStateOf<String?>(null) }
+    
+    LaunchedEffect(filePath) {
+        withContext(Dispatchers.IO) {
+            thumbnailPath = getPdfThumbnailPath(context, filePath)
+        }
+    }
+    
+    Card(
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        modifier = modifier
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            if (thumbnailPath != null) {
+                AsyncImage(
+                    model = thumbnailPath,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                // Sleek fallback cover
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PictureAsPdf,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "PDF",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun getPdfThumbnailPath(context: Context, filePath: String): String? {
+    try {
+        val file = File(filePath)
+        if (!file.exists() || !file.canRead()) return null
+        
+        val cacheKey = "thumb_" + file.nameWithoutExtension.hashCode() + "_" + file.lastModified() + ".png"
+        val cacheFile = File(context.cacheDir, cacheKey)
+        if (cacheFile.exists()) {
+            return cacheFile.absolutePath
+        }
+        
+        val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY) ?: return null
+        val renderer = PdfRenderer(pfd)
+        if (renderer.pageCount > 0) {
+            val page = renderer.openPage(0)
+            val width = 150
+            val height = (width.toFloat() / page.width * page.height).toInt().coerceAtLeast(100)
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            page.close()
+            renderer.close()
+            pfd.close()
+            
+            FileOutputStream(cacheFile).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 80, out)
+            }
+            return cacheFile.absolutePath
+        } else {
+            renderer.close()
+            pfd.close()
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+    return null
+}
+
+fun formatReadingTime(totalSeconds: Long): String {
+    val minutes = totalSeconds / 60
+    val hours = minutes / 60
+    val remainingMinutes = minutes % 60
+    return when {
+        hours > 0 -> "$hours ساعة و $remainingMinutes دقيقة"
+        minutes > 0 -> "$minutes دقيقة"
+        else -> "$totalSeconds ثانية"
+    }
+}
+
+fun formatLastOpened(timestamp: Long): String {
+    val diff = System.currentTimeMillis() - timestamp
+    val seconds = diff / 1000
+    val minutes = seconds / 60
+    val hours = minutes / 60
+    val days = hours / 24
+    
+    return when {
+        minutes < 1 -> "الآن"
+        minutes < 60 -> "منذ $minutes دقيقة"
+        hours < 24 -> "منذ $hours ساعة"
+        days < 7 -> "منذ $days يوم"
+        else -> {
+            val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault())
+            sdf.format(Date(timestamp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SortFilesSheet(
+    sortOption: SortOption,
+    onSortSelected: (SortOption) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surface,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 8.dp)
+                .padding(bottom = 24.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Sort,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Text(
+                    text = "ترتيب الملفات",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Text(
+                text = "اختر طريقة تنظيم واستعراض ملفات الـ PDF الخاصة بك",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
+            )
+
+            // Category 1: Alphabetical
+            Text(
+                text = "أبجدي",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                SortChip(
+                    label = "أ -> ي  ↑",
+                    selected = sortOption == SortOption.ALPHA_ASC,
+                    onClick = { onSortSelected(SortOption.ALPHA_ASC); onDismiss() },
+                    modifier = Modifier.weight(1f)
+                )
+                SortChip(
+                    label = "ي -> أ  ↓",
+                    selected = sortOption == SortOption.ALPHA_DESC,
+                    onClick = { onSortSelected(SortOption.ALPHA_DESC); onDismiss() },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Category 2: File Size
+            Text(
+                text = "حجم الملف",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                SortChip(
+                    label = "الأصغر أولاً  ↑",
+                    selected = sortOption == SortOption.SIZE_ASC,
+                    onClick = { onSortSelected(SortOption.SIZE_ASC); onDismiss() },
+                    modifier = Modifier.weight(1f)
+                )
+                SortChip(
+                    label = "الأكبر أولاً  ↓",
+                    selected = sortOption == SortOption.SIZE_DESC,
+                    onClick = { onSortSelected(SortOption.SIZE_DESC); onDismiss() },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Category 3: Date Modified
+            Text(
+                text = "تاريخ الإضافة",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                SortChip(
+                    label = "الأقدم أولاً  ↑",
+                    selected = sortOption == SortOption.DATE_ASC,
+                    onClick = { onSortSelected(SortOption.DATE_ASC); onDismiss() },
+                    modifier = Modifier.weight(1f)
+                )
+                SortChip(
+                    label = "الأحدث أولاً  ↓",
+                    selected = sortOption == SortOption.DATE_DESC,
+                    onClick = { onSortSelected(SortOption.DATE_DESC); onDismiss() },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SortChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        border = androidx.compose.foundation.BorderStroke(
+            width = 1.dp,
+            color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent
+        ),
+        modifier = modifier.height(40.dp)
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LibraryStatsSheet(
+    uiState: PdfUiState,
+    recentPdfs: List<RecentPdf>,
+    onDismiss: () -> Unit
+) {
+    val totalFiles = uiState.allPdfFiles.size
+    
+    fun getSizeBytes(sizeStr: String): Long {
+        val trimmed = sizeStr.uppercase().trim()
+        val numberPart = trimmed.filter { it.isDigit() || it == '.' }.toDoubleOrNull() ?: 0.0
+        return when {
+            trimmed.contains("GB") -> (numberPart * 1024 * 1024 * 1024).toLong()
+            trimmed.contains("MB") -> (numberPart * 1024 * 1024).toLong()
+            trimmed.contains("KB") -> (numberPart * 1024).toLong()
+            else -> numberPart.toLong()
+        }
+    }
+    
+    val totalPdfBytes = uiState.allPdfFiles.sumOf { getSizeBytes(it.fileSize) }
+    val totalPdfSizeFormatted = when {
+        totalPdfBytes > 1024 * 1024 * 1024 -> String.format(Locale.US, "%.1f GB", totalPdfBytes / (1024f * 1024f * 1024f))
+        totalPdfBytes > 1024 * 1024 -> String.format(Locale.US, "%.1f MB", totalPdfBytes / (1024f * 1024f))
+        else -> "${totalPdfBytes / 1024} KB"
+    }
+    
+    val favoriteCount = uiState.allPdfFiles.count { it.isFavorite }
+    val openedCount = uiState.allPdfFiles.count { file -> recentPdfs.any { it.filePath == file.filePath } }
+    val deletedCount = recentPdfs.count { !File(it.filePath).exists() }
+    val formattedReadingTime = formatReadingTime(uiState.totalReadingTimeSeconds)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surface,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 8.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Analytics,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Text(
+                    text = "إحصائيات المكتبة",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Text(
+                text = "نظرة عامة على ملفات ومؤشرات القراءة في مكتبتك",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
+            )
+
+            // Grid of stats cards
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    StatCard(
+                        title = "إجمالي الملفات",
+                        value = "$totalFiles ملف",
+                        icon = Icons.Default.PictureAsPdf,
+                        iconColor = Color(0xFFEF5350),
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatCard(
+                        title = "حجم المستندات",
+                        value = totalPdfSizeFormatted,
+                        icon = Icons.Default.SdStorage,
+                        iconColor = Color(0xFF42A5F5),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    StatCard(
+                        title = "الملفات المفضلة",
+                        value = "$favoriteCount ملف",
+                        icon = Icons.Default.Star,
+                        iconColor = Color(0xFFFFCA28),
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatCard(
+                        title = "الملفات المفتوحة",
+                        value = "$openedCount ملف",
+                        icon = Icons.Default.History,
+                        iconColor = Color(0xFF66BB6A),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    StatCard(
+                        title = "ساعات القراءة",
+                        value = formattedReadingTime,
+                        icon = Icons.Default.AccessTime,
+                        iconColor = Color(0xFFAB47BC),
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatCard(
+                        title = "مفقودة من الهاتف",
+                        value = "$deletedCount ملف",
+                        icon = Icons.Default.FolderOff,
+                        iconColor = Color(0xFF78909C),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatCard(
+    title: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .background(iconColor.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconColor,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(
+                    text = title,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = value,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
@@ -595,6 +1265,7 @@ fun FoldersTabScreen(
     uiState: PdfUiState
 ) {
     val context = LocalContext.current
+    val recentPdfs by viewModel.recentPdfs.collectAsState(initial = emptyList())
     
     // Group scanned files by folderName
     val folderGroups = remember(uiState.allPdfFiles) {
@@ -749,8 +1420,16 @@ fun FoldersTabScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(folderFiles) { file ->
+                    val recentInfo = recentPdfs.find { it.filePath == file.filePath }
+                    val progressPercent = if (recentInfo != null && recentInfo.totalPages > 0) {
+                        (recentInfo.lastPage.toFloat() / recentInfo.totalPages.toFloat() * 100).toInt().coerceIn(0, 100)
+                    } else null
+                    val lastOpenedText = recentInfo?.let { formatLastOpened(it.lastOpened) }
+
                     PdfListItem(
                         file = file,
+                        progressPercent = progressPercent,
+                        lastOpenedText = lastOpenedText,
                         onClick = { viewModel.selectPdf(file.filePath, file.fileName) },
                         onToggleFav = { viewModel.toggleFavorite(context, file.filePath) }
                     )

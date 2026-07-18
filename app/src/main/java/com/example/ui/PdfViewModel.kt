@@ -53,6 +53,15 @@ data class StorageInfo(
     val usedPercentage: Int = 0
 )
 
+enum class SortOption {
+    ALPHA_ASC, // A -> Z
+    ALPHA_DESC, // Z -> A
+    SIZE_ASC, // Smallest -> Largest
+    SIZE_DESC, // Largest -> Smallest
+    DATE_ASC, // Oldest -> Newest
+    DATE_DESC // Newest -> Oldest
+}
+
 data class LocalPdfFile(
     val filePath: String,
     val fileName: String,
@@ -97,6 +106,8 @@ data class PdfUiState(
     val dashboardSearchQuery: String = "",
     val isGridView: Boolean = true,
     val selectedFilter: FileFilter = FileFilter.All,
+    val sortOption: SortOption = SortOption.ALPHA_ASC,
+    val totalReadingTimeSeconds: Long = 0L,
     val starredPdfs: Set<String> = emptySet(),
     val allPdfFiles: List<LocalPdfFile> = emptyList(),
     val showToolsTab: Boolean = true,
@@ -109,6 +120,25 @@ class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
     val uiState: StateFlow<PdfUiState> = _uiState.asStateFlow()
 
     val recentPdfs = recentPdfDao.getAllRecentPdfs()
+
+    fun setSortOption(option: SortOption) {
+        _uiState.update { it.copy(sortOption = option) }
+    }
+
+    fun loadReadingTime(context: Context) {
+        val prefs = context.getSharedPreferences("pdf_reader_prefs", Context.MODE_PRIVATE)
+        val seconds = prefs.getLong("total_reading_time_seconds", 0L)
+        _uiState.update { it.copy(totalReadingTimeSeconds = seconds) }
+    }
+
+    fun incrementReadingTime(context: Context, deltaSeconds: Long) {
+        _uiState.update { 
+            val newTime = it.totalReadingTimeSeconds + deltaSeconds
+            val prefs = context.getSharedPreferences("pdf_reader_prefs", Context.MODE_PRIVATE)
+            prefs.edit().putLong("total_reading_time_seconds", newTime).apply()
+            it.copy(totalReadingTimeSeconds = newTime)
+        }
+    }
 
     // SharedFlow to trigger JS commands in WebView
     private val _jsCommandFlow = MutableSharedFlow<String>()
@@ -411,6 +441,8 @@ class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
                 currentScreen = nextScreen
             )
         }
+        
+        loadReadingTime(context)
         
         // Scan for local PDF files and populate cache
         scanFiles(context)
