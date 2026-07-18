@@ -33,7 +33,23 @@ data class PdfUiState(
     val searchMatchesTotal: Int = 0,
     val searchMatchActive: Int = 0,
     val isSearchActive: Boolean = false,
-    val currentScale: Float = 1.0f
+    val currentScale: Float = 1.0f,
+    
+    // View Options
+    val scrollMode: String = "vertical", // "vertical", "horizontal"
+    val snapToPage: Boolean = false,
+    val autoHideToolbar: Boolean = false,
+    
+    // Display Settings
+    val readingTheme: String = "light", // "light", "dark", "black", "sepia"
+    val isSystemBrightness: Boolean = true,
+    val customBrightness: Float = 0.5f,
+    val keepScreenOn: Boolean = false,
+    
+    // Bookmarks and AutoScroll
+    val bookmarkedPages: Set<Int> = emptySet(),
+    val isAutoScrolling: Boolean = false,
+    val autoScrollSpeed: Int = 25 // px/s
 )
 
 class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
@@ -46,6 +62,72 @@ class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
     // SharedFlow to trigger JS commands in WebView
     private val _jsCommandFlow = MutableSharedFlow<String>()
     val jsCommandFlow: SharedFlow<String> = _jsCommandFlow.asSharedFlow()
+
+    fun loadBookmarks(context: Context, filePath: String) {
+        val prefs = context.getSharedPreferences("pdf_reader_bookmarks", Context.MODE_PRIVATE)
+        val bookmarkStr = prefs.getString(filePath, "") ?: ""
+        val bookmarks = if (bookmarkStr.isEmpty()) {
+            emptySet()
+        } else {
+            bookmarkStr.split(",").mapNotNull { it.toIntOrNull() }.toSet()
+        }
+        _uiState.update { it.copy(bookmarkedPages = bookmarks) }
+    }
+
+    fun toggleBookmark(context: Context, pageNumber: Int) {
+        val path = _uiState.value.currentPdfPath ?: return
+        val currentBookmarks = _uiState.value.bookmarkedPages.toMutableSet()
+        if (currentBookmarks.contains(pageNumber)) {
+            currentBookmarks.remove(pageNumber)
+        } else {
+            currentBookmarks.add(pageNumber)
+        }
+        _uiState.update { it.copy(bookmarkedPages = currentBookmarks) }
+        
+        val prefs = context.getSharedPreferences("pdf_reader_bookmarks", Context.MODE_PRIVATE)
+        prefs.edit().putString(path, currentBookmarks.joinToString(",")).apply()
+    }
+
+    fun setScrollMode(mode: String) {
+        _uiState.update { it.copy(scrollMode = mode) }
+        val jsVal = if (mode == "horizontal") 1 else 0
+        sendJsCommand("PDFViewerApplication.pdfViewer.scrollMode = $jsVal")
+    }
+
+    fun setSnapToPage(snap: Boolean) {
+        _uiState.update { it.copy(snapToPage = snap) }
+    }
+
+    fun setAutoHideToolbar(autoHide: Boolean) {
+        _uiState.update { it.copy(autoHideToolbar = autoHide) }
+    }
+
+    fun setReadingTheme(theme: String) {
+        _uiState.update { it.copy(readingTheme = theme) }
+        sendJsCommand("applyTheme('$theme')")
+    }
+
+    fun setSystemBrightness(isSystem: Boolean) {
+        _uiState.update { it.copy(isSystemBrightness = isSystem) }
+    }
+
+    fun setCustomBrightness(brightness: Float) {
+        _uiState.update { it.copy(customBrightness = brightness, isSystemBrightness = false) }
+    }
+
+    fun setKeepScreenOn(keep: Boolean) {
+        _uiState.update { it.copy(keepScreenOn = keep) }
+    }
+
+    fun startAutoScroll(speedPxPerSecond: Int) {
+        _uiState.update { it.copy(isAutoScrolling = true, autoScrollSpeed = speedPxPerSecond) }
+        sendJsCommand("startAutoScroll($speedPxPerSecond)")
+    }
+
+    fun stopAutoScroll() {
+        _uiState.update { it.copy(isAutoScrolling = false) }
+        sendJsCommand("stopAutoScroll()")
+    }
 
     fun selectPdf(filePath: String, fileName: String) {
         viewModelScope.launch {
