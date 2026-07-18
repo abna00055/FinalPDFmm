@@ -146,7 +146,7 @@ fun ViewerScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        contentWindowInsets = WindowInsets.safeDrawing
+        contentWindowInsets = WindowInsets(0.dp)
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -342,11 +342,11 @@ fun ViewerScreen(
                                 )
                             }
 
-                            // Zoom & Display Controls Button
-                            IconButton(onClick = { activeSheet = BottomSheetType.ZoomSettings }) {
+                            // Zoom Out Control
+                            IconButton(onClick = { viewModel.triggerZoomOut() }) {
                                 Icon(
-                                    imageVector = Icons.Default.ZoomIn,
-                                    contentDescription = "الزووم والسطوع",
+                                    imageVector = Icons.Default.ZoomOut,
+                                    contentDescription = "تصغير",
                                     tint = MaterialTheme.colorScheme.onSurface
                                 )
                             }
@@ -367,6 +367,15 @@ fun ViewerScreen(
                                     text = if (state.totalPages > 0) "${state.currentPage} / ${state.totalPages}" else "${state.currentPage}",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            // Zoom In Control
+                            IconButton(onClick = { viewModel.triggerZoomIn() }) {
+                                Icon(
+                                    imageVector = Icons.Default.ZoomIn,
+                                    contentDescription = "تكبير",
+                                    tint = MaterialTheme.colorScheme.onSurface
                                 )
                             }
 
@@ -705,7 +714,8 @@ fun PdfWebView(
 
                 // Encode file URL properly
                 val encodedFileUrl = Uri.encode("file://$pdfPath")
-                val viewerUrl = "file:///android_asset/pdfjs/web/viewer.html?file=$encodedFileUrl"
+                val currentPage = state.currentPage
+                val viewerUrl = "file:///android_asset/pdfjs/web/viewer.html?file=$encodedFileUrl#page=$currentPage"
                 loadUrl(viewerUrl)
                 onWebViewCreated(this)
             }

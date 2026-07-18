@@ -29,6 +29,9 @@ class MainActivity : ComponentActivity() {
       PdfViewModelFactory(database.recentPdfDao())
     }
 
+    // Initialize state and check welcome screen status
+    viewModel.initialize(applicationContext)
+
     setContent {
       MyApplicationTheme {
         Surface(
@@ -38,6 +41,9 @@ class MainActivity : ComponentActivity() {
           val state by viewModel.uiState.collectAsState()
 
           when (state.currentScreen) {
+            Screen.Welcome -> {
+              com.example.ui.WelcomeScreen(viewModel = viewModel)
+            }
             Screen.Dashboard -> {
               DashboardScreen(viewModel = viewModel)
             }
