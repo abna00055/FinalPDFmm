@@ -170,105 +170,121 @@ fun ViewerScreen(
                 }
             }
 
-            // FLOATING TOP BAR
+            // FLOATING TOP BAR WITH STATUS BAR BACKDROP (GLASSMORPHIC SOLID BAR)
             AnimatedVisibility(
                 visible = isBarsVisible,
                 enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
-                modifier = Modifier.align(Alignment.TopCenter)
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
             ) {
-                if (state.isSearchActive) {
-                    NativeSearchBar(
-                        viewModel = viewModel,
-                        state = state,
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                    shadowElevation = 6.dp,
+                    tonalElevation = 4.dp
+                ) {
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(14.dp)
-                    )
-                } else {
-                    val fileName = state.currentPdfName ?: "عرض ملف PDF"
-                    // Shrink text size based on length of filename
-                    val fileNameFontSize = when {
-                        fileName.length > 35 -> 11.sp
-                        fileName.length > 20 -> 13.sp
-                        else -> 15.sp
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .statusBarsPadding()
+                            .padding(bottom = 10.dp)
                     ) {
-                        IconButton(
-                            onClick = { viewModel.goBackToDashboard() },
-                            modifier = Modifier.testTag("viewer_back_btn")
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "رجوع",
-                                tint = MaterialTheme.colorScheme.onSurface
+                        if (state.isSearchActive) {
+                            NativeSearchBar(
+                                viewModel = viewModel,
+                                state = state,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 6.dp)
                             )
-                        }
-
-                        Spacer(modifier = Modifier.width(4.dp))
-
-                        Text(
-                            text = fileName,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = fileNameFontSize,
-                            maxLines = 2,
-                            overflow = TextOverflow.Visible,
-                            modifier = Modifier.weight(1f),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            textAlign = TextAlign.Center
-                        )
-
-                        Spacer(modifier = Modifier.width(4.dp))
-
-                        IconButton(
-                            onClick = {
-                                viewModel.openSearch()
+                        } else {
+                            val fileName = state.currentPdfName ?: "عرض ملف PDF"
+                            // Shrink text size based on length of filename
+                            val fileNameFontSize = when {
+                                fileName.length > 35 -> 11.sp
+                                fileName.length > 20 -> 13.sp
+                                else -> 15.sp
                             }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "البحث",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
 
-                        Spacer(modifier = Modifier.width(4.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = { viewModel.goBackToDashboard() },
+                                    modifier = Modifier.testTag("viewer_back_btn")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "رجوع",
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
 
-                        val isBookmarked = state.bookmarkedPages.contains(state.currentPage)
-                        IconButton(
-                            onClick = { viewModel.toggleBookmark(context, state.currentPage) }
-                        ) {
-                            Icon(
-                                imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                                contentDescription = "إشارة مرجعية",
-                                tint = if (isBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+                                Spacer(modifier = Modifier.width(4.dp))
 
-                        Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = fileName,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = fileNameFontSize,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Visible,
+                                    modifier = Modifier.weight(1f),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    textAlign = TextAlign.Center
+                                )
 
-                        IconButton(
-                            onClick = {
-                                state.currentPdfPath?.let { path ->
-                                    sharePdf(context, path, fileName)
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                val isBookmarked = state.bookmarkedPages.contains(state.currentPage)
+                                IconButton(
+                                    onClick = { viewModel.toggleBookmark(context, state.currentPage) }
+                                ) {
+                                    Icon(
+                                        imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                        contentDescription = "إشارة مرجعية",
+                                        tint = if (isBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                IconButton(
+                                    onClick = {
+                                        viewModel.openSearch()
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = "البحث",
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                IconButton(
+                                    onClick = {
+                                        state.currentPdfPath?.let { path ->
+                                            sharePdf(context, path, fileName)
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Share,
+                                        contentDescription = "مشاركة",
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
                                 }
                             }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Share,
-                                contentDescription = "مشاركة",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
                         }
                     }
                 }
