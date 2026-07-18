@@ -214,7 +214,7 @@ fun DashboardScreen(
                         .testTag("recent_pdfs_list"),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(recentPdfs, key = { it.filePath }) { pdf ->
+                    items(recentPdfs, key = { it.id }) { pdf ->
                         RecentPdfItem(
                             pdf = pdf,
                             onClick = { viewModel.selectPdf(pdf.filePath, pdf.fileName) },

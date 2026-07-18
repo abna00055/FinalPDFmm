@@ -2,6 +2,7 @@ package com.example.ui
 
 import android.app.Activity
 import android.content.Context
+import android.content.pm.ActivityInfo
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.WebSettings
@@ -67,6 +68,7 @@ enum class BottomSheetType {
     MoreOptions,
     ViewOptions,
     DisplaySettings,
+    ZoomSettings,
     JumpToPage,
     DocumentInfo,
     Bookmarks,
@@ -230,7 +232,7 @@ fun ViewerScreen(
 
                         IconButton(
                             onClick = {
-                                viewModel.triggerSearch("")
+                                viewModel.openSearch()
                             }
                         ) {
                             Icon(
@@ -340,6 +342,15 @@ fun ViewerScreen(
                                 )
                             }
 
+                            // Zoom & Display Controls Button
+                            IconButton(onClick = { activeSheet = BottomSheetType.ZoomSettings }) {
+                                Icon(
+                                    imageVector = Icons.Default.ZoomIn,
+                                    contentDescription = "الزووم والسطوع",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
                             // 4. Interactive Page indicator
                             Button(
                                 onClick = { activeSheet = BottomSheetType.JumpToPage },
@@ -402,6 +413,11 @@ fun ViewerScreen(
                             onDismiss = { activeSheet = BottomSheetType.None }
                         )
                         BottomSheetType.DisplaySettings -> DisplaySettingsSheet(
+                            viewModel = viewModel,
+                            state = state,
+                            onDismiss = { activeSheet = BottomSheetType.None }
+                        )
+                        BottomSheetType.ZoomSettings -> ZoomSettingsSheet(
                             viewModel = viewModel,
                             state = state,
                             onDismiss = { activeSheet = BottomSheetType.None }
@@ -595,6 +611,54 @@ fun PdfWebView(
                                                 }
                                             };
 
+                                            window.setScale = function(scale) {
+                                                try {
+                                                    if (typeof PDFViewerApplication !== 'undefined' && PDFViewerApplication.pdfViewer) {
+                                                        PDFViewerApplication.pdfViewer.currentScale = scale;
+                                                    }
+                                                } catch (e) {
+                                                    console.error("Error in setScale JS: " + e);
+                                                }
+                                            };
+
+                                            window.addEventListener('resize', function() {
+                                                if (typeof PDFViewerApplication !== 'undefined' && PDFViewerApplication.pdfViewer) {
+                                                    PDFViewerApplication.pdfViewer.update();
+                                                }
+                                            });
+
+                                            var initialTouchDist = 0;
+                                            var initialScale = 1.0;
+
+                                            document.addEventListener('touchstart', function(e) {
+                                                if (e.touches.length === 2) {
+                                                    var t1 = e.touches[0];
+                                                    var t2 = e.touches[1];
+                                                    initialTouchDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+                                                    initialScale = PDFViewerApplication.pdfViewer.currentScale || 1.0;
+                                                }
+                                            }, { passive: true });
+
+                                            document.addEventListener('touchmove', function(e) {
+                                                if (e.touches.length === 2 && initialTouchDist > 0) {
+                                                    e.preventDefault();
+                                                    var t1 = e.touches[0];
+                                                    var t2 = e.touches[1];
+                                                    var dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+                                                    var factor = dist / initialTouchDist;
+                                                    var newScale = initialScale * factor;
+                                                    newScale = Math.min(Math.max(newScale, 0.25), 4.0);
+                                                    window.setScale(newScale);
+                                                    AndroidBridge.onScaleChanged(newScale);
+                                                }
+                                            }, { passive: false });
+
+                                            document.addEventListener('touchend', function(e) {
+                                                if (e.touches.length < 2) {
+                                                    initialTouchDist = 0;
+                                                }
+                                            }, { passive: true });
+
                                             // Apply current UI states
                                             window.applyTheme('${state.readingTheme}');
                                             PDFViewerApplication.pdfViewer.scrollMode = ${if (state.scrollMode == "horizontal") 1 else 0};
@@ -628,6 +692,13 @@ fun PdfWebView(
                     fun onSearchCountUpdated(total: Int, current: Int) {
                         coroutineScope.launch {
                             viewModel.updateSearchMatches(total, current)
+                        }
+                    }
+
+                    @android.webkit.JavascriptInterface
+                    fun onScaleChanged(scale: Float) {
+                        coroutineScope.launch {
+                            viewModel.updateScaleFromJs(scale)
                         }
                     }
                 }, "AndroidBridge")
@@ -1019,6 +1090,212 @@ fun ViewOptionsSheet(
                 checked = state.autoHideToolbar,
                 onCheckedChange = { viewModel.setAutoHideToolbar(it) }
             )
+        }
+    }
+}
+
+@Composable
+fun ZoomSettingsSheet(
+    viewModel: PdfViewModel,
+    state: PdfUiState,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 24.dp)
+            .padding(horizontal = 24.dp)
+    ) {
+        Text(
+            text = "الزووم والتحكم في العرض",
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp,
+            modifier = Modifier.padding(bottom = 4.dp),
+            textAlign = TextAlign.Start
+        )
+
+        Text(
+            text = "تعديل مقياس الصفحات واتجاه الشاشة للقراءة المريحة",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 20.dp),
+            textAlign = TextAlign.Start
+        )
+
+        // Zoom Control Row (- Percentage +)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "مقياس الزووم الحالي",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                IconButton(
+                    onClick = { viewModel.triggerZoomOut() },
+                    modifier = Modifier
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                        .size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Remove,
+                        contentDescription = "تصغير",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                Text(
+                    text = "${(state.currentScale * 100).roundToInt()}%",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.widthIn(min = 48.dp),
+                    textAlign = TextAlign.Center
+                )
+
+                IconButton(
+                    onClick = { viewModel.triggerZoomIn() },
+                    modifier = Modifier
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                        .size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "تكبير",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+
+        // Zoom Slider
+        Slider(
+            value = state.currentScale,
+            onValueChange = { viewModel.setScale(it) },
+            valueRange = 0.25f..3.0f,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+        )
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+        // Quick zoom preset buttons
+        Text(
+            text = "خيارات ملاءمة الصفحة السريعة",
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Actual size
+            Button(
+                onClick = { viewModel.setScale(1.0f) },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (state.currentScale == 1.0f) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    contentColor = if (state.currentScale == 1.0f) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(vertical = 10.dp)
+            ) {
+                Text(text = "الحجم الأصلي", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+
+            // Fit width
+            Button(
+                onClick = { viewModel.sendJsCommand("PDFViewerApplication.pdfViewer.currentScaleValue = 'page-width'") },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(vertical = 10.dp)
+            ) {
+                Text(text = "ملائمة العرض", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+
+            // Fit page
+            Button(
+                onClick = { viewModel.sendJsCommand("PDFViewerApplication.pdfViewer.currentScaleValue = 'page-fit'") },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(vertical = 10.dp)
+            ) {
+                Text(text = "ملائمة الصفحة", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+        // Screen orientation options
+        Text(
+            text = "اتجاه الشاشة المفضل",
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val orientations = listOf(
+                Triple(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, "عمودي (طولي)", Icons.Default.StayCurrentPortrait),
+                Triple(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE, "أفقي (عرضي)", Icons.Default.StayCurrentLandscape),
+                Triple(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, "تلقائي (حسب النظام)", Icons.Default.ScreenRotation)
+            )
+
+            orientations.forEach { (orientationVal, label, icon) ->
+                val isSelected = state.screenOrientation == orientationVal
+                Button(
+                    onClick = { viewModel.setScreenOrientation(context, orientationVal) },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(vertical = 10.dp)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(imageVector = icon, contentDescription = label, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = label, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    }
+                }
+            }
         }
     }
 }

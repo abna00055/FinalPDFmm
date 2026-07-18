@@ -1,6 +1,7 @@
 package com.example.ui
 
 import android.content.Context
+import android.content.pm.ActivityInfo
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -34,6 +35,7 @@ data class PdfUiState(
     val searchMatchActive: Int = 0,
     val isSearchActive: Boolean = false,
     val currentScale: Float = 1.0f,
+    val screenOrientation: Int = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED,
     
     // View Options
     val scrollMode: String = "vertical", // "vertical", "horizontal"
@@ -134,6 +136,7 @@ class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
             // Find if already exists, then insert or update
             val existing = recentPdfDao.getPdfByPath(filePath)
             val pdf = RecentPdf(
+                id = existing?.id ?: 0,
                 filePath = filePath,
                 fileName = fileName,
                 lastPage = existing?.lastPage ?: 1,
@@ -276,6 +279,27 @@ class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
             })
             """.trimIndent()
         )
+    }
+
+    fun openSearch() {
+        _uiState.update { it.copy(isSearchActive = true) }
+    }
+
+    fun setScale(scale: Float) {
+        val coerced = scale.coerceIn(0.25f, 4.0f)
+        _uiState.update { it.copy(currentScale = coerced) }
+        sendJsCommand("window.setScale($coerced)")
+    }
+
+    fun updateScaleFromJs(scale: Float) {
+        val coerced = scale.coerceIn(0.25f, 4.0f)
+        _uiState.update { it.copy(currentScale = coerced) }
+    }
+
+    fun setScreenOrientation(context: Context, orientation: Int) {
+        val activity = context as? android.app.Activity
+        activity?.requestedOrientation = orientation
+        _uiState.update { it.copy(screenOrientation = orientation) }
     }
 
     fun deleteRecentPdf(filePath: String) {
