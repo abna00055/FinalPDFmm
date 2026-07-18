@@ -1,0 +1,6 @@
+{
+  "name": "قارئ PDF",
+  "description": "تطبيق متكامل لقراءة ملفات PDF يعتمد على مكتبة pdf.js v4.10.38 من Mozilla مع واجهة تحكم native بالكامل مبنية بـ Jetpack Compose وشريط تحكم سفلي احترافي.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
