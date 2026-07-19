@@ -3032,15 +3032,16 @@ fun MiniPlayerOverlay(
             // Right side: Clean actions with separated small circular halos (backgrounds)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Replay Button with separate small halo background
-                IconButton(
-                    onClick = onReplay,
-                    enabled = !isLoading,
+                // Replay Button with separate custom circular background (smaller but separated)
+                Box(
                     modifier = Modifier
                         .size(28.dp)
-                        .background(Color(0xFF222031), CircleShape)
+                        .clip(CircleShape)
+                        .background(Color(0xFF222031))
+                        .clickable(enabled = !isLoading, onClick = onReplay),
+                    contentAlignment = Alignment.Center
                 ) {
                     if (isLoading) {
                         CircularProgressIndicator(
@@ -3058,16 +3059,18 @@ fun MiniPlayerOverlay(
                     }
                 }
 
-                // Delete Button with separate small halo background
-                IconButton(
-                    onClick = onDismiss,
+                // Delete/Close Button with separate custom circular background (smaller but separated)
+                Box(
                     modifier = Modifier
                         .size(28.dp)
-                        .background(Color(0xFF2B1C1C), CircleShape)
+                        .clip(CircleShape)
+                        .background(Color(0xFF2B1C1C))
+                        .clickable(onClick = onDismiss),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "حذف المشغل",
+                        contentDescription = "إغلاق المشغل",
                         tint = Color(0xFFFF8A80),
                         modifier = Modifier.size(14.dp)
                     )

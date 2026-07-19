@@ -723,9 +723,15 @@ fun PdfGridItem(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 // Name of PDF
+                val gridFileNameFontSize = when {
+                    file.fileName.length > 35 -> 9.sp
+                    file.fileName.length > 25 -> 10.sp
+                    file.fileName.length > 15 -> 11.sp
+                    else -> 12.sp
+                }
                 Text(
                     text = file.fileName,
-                    fontSize = 12.sp,
+                    fontSize = gridFileNameFontSize,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -747,9 +753,14 @@ fun PdfGridItem(
                             .background(Color(0xFFFFF9C4), RoundedCornerShape(4.dp))
                             .padding(horizontal = 4.dp, vertical = 2.dp)
                     ) {
+                        val badgeFontSize = when {
+                            file.folderName.length > 25 -> 6.sp
+                            file.folderName.length > 15 -> 7.sp
+                            else -> 8.sp
+                        }
                         Text(
                             text = file.folderName,
-                            fontSize = 8.sp,
+                            fontSize = badgeFontSize,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF5D4037),
                             maxLines = 1,
@@ -832,9 +843,15 @@ fun PdfListItem(
 
             // File Details
             Column(modifier = Modifier.weight(1f)) {
+                val listFileNameFontSize = when {
+                    file.fileName.length > 35 -> 10.sp
+                    file.fileName.length > 25 -> 11.sp
+                    file.fileName.length > 15 -> 12.sp
+                    else -> 13.sp
+                }
                 Text(
                     text = file.fileName,
-                    fontSize = 13.sp,
+                    fontSize = listFileNameFontSize,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
@@ -852,11 +869,18 @@ fun PdfListItem(
                             .background(Color(0xFFFFF9C4), RoundedCornerShape(4.dp))
                             .padding(horizontal = 5.dp, vertical = 2.dp)
                     ) {
+                        val badgeFontSize = when {
+                            file.folderName.length > 25 -> 6.sp
+                            file.folderName.length > 15 -> 7.sp
+                            else -> 8.sp
+                        }
                         Text(
                             text = file.folderName,
-                            fontSize = 8.sp,
+                            fontSize = badgeFontSize,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF5D4037)
+                            color = Color(0xFF5D4037),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                     Text(
@@ -1535,11 +1559,19 @@ fun FoldersTabScreen(
                                 Spacer(modifier = Modifier.width(16.dp))
 
                                 Column(modifier = Modifier.weight(1f)) {
+                                    val folderNameFontSize = when {
+                                        folderName.length > 30 -> 11.sp
+                                        folderName.length > 20 -> 12.sp
+                                        folderName.length > 12 -> 13.sp
+                                        else -> 14.sp
+                                    }
                                     Text(
                                         text = folderName,
-                                        fontSize = 14.sp,
+                                        fontSize = folderNameFontSize,
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
@@ -1575,11 +1607,18 @@ fun FoldersTabScreen(
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
+                val expandedFolderTitleFontSize = when {
+                    (expandedFolder ?: "").length > 30 -> 12.sp
+                    (expandedFolder ?: "").length > 20 -> 14.sp
+                    else -> 16.sp
+                }
                 Text(
                     text = expandedFolder ?: "",
-                    fontSize = 16.sp,
+                    fontSize = expandedFolderTitleFontSize,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
