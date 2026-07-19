@@ -70,6 +70,18 @@ import android.content.res.Configuration
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import kotlinx.coroutines.launch
@@ -132,6 +144,20 @@ fun ViewerScreen(
         }
     }
 
+    fun stopAndDismissAudio() {
+        try {
+            if (mediaPlayer.isPlaying) {
+                mediaPlayer.stop()
+            }
+            mediaPlayer.reset()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        activeAudioUrl = null
+        isAudioPlaying = false
+        isAudioLoading = false
+    }
+
     fun playAudio(url: String) {
         try {
             activeAudioUrl = url
@@ -150,6 +176,13 @@ fun ViewerScreen(
             
             mediaPlayer.setOnCompletionListener {
                 isAudioPlaying = false
+                // Auto-dismiss the mini player after 1.5 seconds to keep the screen clear for the PDF
+                coroutineScope.launch {
+                    delay(1500)
+                    if (!mediaPlayer.isPlaying && activeAudioUrl == url) {
+                        stopAndDismissAudio()
+                    }
+                }
             }
             
             mediaPlayer.setOnErrorListener { mp, what, extra ->
@@ -183,19 +216,7 @@ fun ViewerScreen(
         }
     }
 
-    fun stopAndDismissAudio() {
-        try {
-            if (mediaPlayer.isPlaying) {
-                mediaPlayer.stop()
-            }
-            mediaPlayer.reset()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        activeAudioUrl = null
-        isAudioPlaying = false
-        isAudioLoading = false
-    }
+
 
     DisposableEffect(Unit) {
         onDispose {
@@ -497,37 +518,42 @@ fun ViewerScreen(
                                 icon = Icons.Default.MenuBook,
                                 label = "الصفحات",
                                 onClick = { activeSheet = BottomSheetType.DocumentNavigation },
+                                tint = Color(0xFF4CB050), // Green
                                 modifier = Modifier.weight(1f)
                             )
                             BottomBarItem(
                                 icon = if (state.scrollMode == "horizontal") Icons.Default.ViewCarousel else Icons.Default.ViewStream,
                                 label = "العرض",
                                 onClick = { activeSheet = BottomSheetType.ViewOptions },
+                                tint = Color(0xFF03A9F4), // Light Blue
                                 modifier = Modifier.weight(1f)
                             )
                             BottomBarItem(
                                 icon = Icons.Default.ZoomIn,
                                 label = "الزووم",
                                 onClick = { activeSheet = BottomSheetType.ZoomSettings },
+                                tint = Color(0xFFFF9800), // Orange
                                 modifier = Modifier.weight(1f)
                             )
                             BottomBarItem(
                                 icon = Icons.Default.Palette,
                                 label = "السمات",
                                 onClick = { activeSheet = BottomSheetType.DisplaySettings },
+                                tint = Color(0xFF9C27B0), // Purple
                                 modifier = Modifier.weight(1f)
                             )
                             BottomBarItem(
                                 icon = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                                 label = "إشارة",
                                 onClick = { viewModel.toggleBookmark(context, state.currentPage) },
-                                tint = if (isBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                tint = if (isBookmarked) Color(0xFFE91E63) else Color(0xFFE91E63).copy(alpha = 0.5f), // Pink
                                 modifier = Modifier.weight(1f)
                             )
                             BottomBarItem(
                                 icon = Icons.Default.MoreHoriz,
                                 label = "أدوات",
                                 onClick = { activeSheet = BottomSheetType.MoreOptions },
+                                tint = Color(0xFF009688), // Teal
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -714,8 +740,14 @@ fun ViewerScreen(
                     onReplay = { replayAudio() },
                     onDismiss = { stopAndDismissAudio() },
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = if (isBarsVisible) 110.dp else 24.dp)
+                        .align(Alignment.TopCenter)
+                        .padding(
+                            top = if (isBarsVisible) {
+                                WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 72.dp
+                            } else {
+                                WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 12.dp
+                            }
+                        )
                 )
             }
         }
@@ -2396,25 +2428,17 @@ fun BottomBarItem(
     tint: Color = MaterialTheme.colorScheme.onSurface,
     isSelected: Boolean = false
 ) {
-    Column(
+    Box(
         modifier = modifier
             .clickable(onClick = onClick)
-            .padding(vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
             tint = if (isSelected) MaterialTheme.colorScheme.primary else tint,
-            modifier = Modifier.size(24.dp)
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (isSelected) MaterialTheme.colorScheme.primary else tint.copy(alpha = 0.8f)
+            modifier = Modifier.size(26.dp)
         )
     }
 }
@@ -2727,6 +2751,177 @@ fun DocumentNavigationSheet(
 }
 
 @Composable
+fun WifiSoundWaveIndicator(
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "sound_waves")
+    val pulseProgress1 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulse1"
+    )
+    val pulseProgress2 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, delayMillis = 330, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulse2"
+    )
+    val pulseProgress3 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, delayMillis = 660, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulse3"
+    )
+
+    Canvas(modifier = modifier.size(16.dp)) {
+        val width = size.width
+        val height = size.height
+        val center = Offset(width / 2f, height - 1.dp.toPx())
+
+        // Small source dot at the bottom center
+        drawCircle(
+            color = Color(0xFFB19DFF),
+            radius = 1.5.dp.toPx(),
+            center = center
+        )
+
+        val waveColor = Color(0xFFB19DFF)
+        val strokeWidth = 1.25.dp.toPx()
+        val maxRadius = width - 1.dp.toPx()
+
+        if (isPlaying) {
+            // Wave 1
+            val radius1 = 4.dp.toPx() + (maxRadius - 4.dp.toPx()) * pulseProgress1
+            val alpha1 = (1f - pulseProgress1).coerceIn(0f, 1f)
+            drawArc(
+                color = waveColor.copy(alpha = alpha1),
+                startAngle = 215f,
+                sweepAngle = 110f,
+                useCenter = false,
+                topLeft = Offset(center.x - radius1, center.y - radius1),
+                size = Size(radius1 * 2, radius1 * 2),
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+
+            // Wave 2
+            val radius2 = 4.dp.toPx() + (maxRadius - 4.dp.toPx()) * pulseProgress2
+            val alpha2 = (1f - pulseProgress2).coerceIn(0f, 1f)
+            drawArc(
+                color = waveColor.copy(alpha = alpha2),
+                startAngle = 215f,
+                sweepAngle = 110f,
+                useCenter = false,
+                topLeft = Offset(center.x - radius2, center.y - radius2),
+                size = Size(radius2 * 2, radius2 * 2),
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+
+            // Wave 3
+            val radius3 = 4.dp.toPx() + (maxRadius - 4.dp.toPx()) * pulseProgress3
+            val alpha3 = (1f - pulseProgress3).coerceIn(0f, 1f)
+            drawArc(
+                color = waveColor.copy(alpha = alpha3),
+                startAngle = 215f,
+                sweepAngle = 110f,
+                useCenter = false,
+                topLeft = Offset(center.x - radius3, center.y - radius3),
+                size = Size(radius3 * 2, radius3 * 2),
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+        } else {
+            // Draw 2 static faint arcs
+            for (i in 1..2) {
+                val radius = (4 * i).dp.toPx()
+                drawArc(
+                    color = waveColor.copy(alpha = 0.4f),
+                    startAngle = 215f,
+                    sweepAngle = 110f,
+                    useCenter = false,
+                    topLeft = Offset(center.x - radius, center.y - radius),
+                    size = Size(radius * 2, radius * 2),
+                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SpokenWordText(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    val trimmed = text.trim()
+    val isSentence = trimmed.contains(" ") || trimmed.length > 20
+    val baseFontSize = when {
+        isSentence -> 11.sp
+        trimmed.length > 15 -> 11.sp
+        trimmed.length > 10 -> 12.sp
+        else -> 14.sp
+    }
+
+    if (isSentence) {
+        val scrollState = rememberScrollState()
+        LaunchedEffect(trimmed) {
+            scrollState.scrollTo(0)
+            while (true) {
+                delay(1200)
+                if (scrollState.maxValue > 0) {
+                    scrollState.animateScrollTo(
+                        value = scrollState.maxValue,
+                        animationSpec = tween(
+                            durationMillis = (scrollState.maxValue * 15).coerceIn(2000, 12000),
+                            easing = LinearEasing
+                        )
+                    )
+                    delay(1500)
+                    scrollState.animateScrollTo(
+                        value = 0,
+                        animationSpec = tween(1200, easing = LinearEasing)
+                    )
+                }
+            }
+        }
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .horizontalScroll(scrollState, enabled = false),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = trimmed,
+                fontSize = baseFontSize,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
+    } else {
+        Text(
+            text = trimmed,
+            fontSize = baseFontSize,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = modifier
+        )
+    }
+}
+
+@Composable
 fun MiniPlayerOverlay(
     wordName: String,
     isPlaying: Boolean,
@@ -2737,101 +2932,90 @@ fun MiniPlayerOverlay(
 ) {
     Surface(
         modifier = modifier
-            .padding(horizontal = 16.dp, vertical = 24.dp)
-            .widthIn(max = 400.dp)
+            .padding(horizontal = 24.dp)
+            .widthIn(max = 360.dp)
             .testTag("audio_mini_player"),
-        shape = RoundedCornerShape(24.dp),
-        color = Color(0xFF1C1B26), // Premium dark theme background for the mini player
-        border = BorderStroke(1.dp, Color(0xFF7C5CFF).copy(alpha = 0.4f)), // Glowing violet outline
-        shadowElevation = 12.dp
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0xFF14131B), // Beautiful ultra-dark charcoal background
+        border = BorderStroke(1.dp, Color(0xFF7C5CFF).copy(alpha = 0.5f)), // Glowing violet outline
+        shadowElevation = 8.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Left side: Icon & Word Info
+            // Left side: Wi-Fi Wave Icon & Spoken Text Info
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                // Animated or pulsing audio icon
+                // Dynamic pulsing WiFi-style soundwave indicator
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .background(Color(0xFF2A283E), CircleShape),
+                        .size(30.dp)
+                        .background(Color(0xFF222031), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.VolumeUp else Icons.Default.VolumeMute,
-                        contentDescription = null,
-                        tint = Color(0xFFB19DFF), // Glowing Lavender
-                        modifier = Modifier.size(18.dp)
+                    WifiSoundWaveIndicator(
+                        isPlaying = isPlaying,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
 
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "جاري النطق...",
-                        fontSize = 10.sp,
-                        color = Color(0xFFBBB8CF),
+                        fontSize = 9.sp,
+                        color = Color(0xFFB19DFF),
                         fontWeight = FontWeight.Medium
                     )
-                    Text(
-                        text = wordName.ifEmpty { "كلمة غير معروفة" },
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                    SpokenWordText(
+                        text = wordName.ifEmpty { "كلمة غير معروفة" }
                     )
                 }
             }
 
-            // Right side: Action controls (Replay & Dismiss)
+            // Right side: Clean minimal actions (no background halo / circle)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Replay/Play Button
+                // Replay Button (Standalone clean icon)
                 IconButton(
                     onClick = onReplay,
                     enabled = !isLoading,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .background(Color(0xFF2A283E), CircleShape)
+                    modifier = Modifier.size(32.dp)
                 ) {
                     if (isLoading) {
                         CircularProgressIndicator(
                             color = Color(0xFFB19DFF),
-                            strokeWidth = 2.dp,
-                            modifier = Modifier.size(16.dp)
+                            strokeWidth = 1.5.dp,
+                            modifier = Modifier.size(14.dp)
                         )
                     } else {
                         Icon(
                             imageVector = Icons.Default.Replay,
                             contentDescription = "إعادة النطق",
                             tint = Color(0xFFB19DFF),
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
 
-                // Delete/Dismiss Button
+                // Delete Button (Standalone clean icon)
                 IconButton(
                     onClick = onDismiss,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .background(Color(0xFFFFEBEE).copy(alpha = 0.1f), CircleShape)
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "حذف المشغل",
                         tint = Color(0xFFFF8A80),
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }

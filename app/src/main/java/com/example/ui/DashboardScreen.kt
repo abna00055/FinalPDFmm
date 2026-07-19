@@ -20,6 +20,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.Path
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -384,7 +391,7 @@ fun HomeTabScreen(
 
             // Two Premium Header Icons (Stats & Sort) - Separated Circular Buttons
             Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Statistics Icon Button
@@ -604,7 +611,7 @@ fun HomeTabScreen(
     if (showSortSheet) {
         SortFilesSheet(
             sortOption = uiState.sortOption,
-            onSortSelected = { viewModel.setSortOption(it) },
+            onSortSelected = { viewModel.setSortOption(context, it) },
             onDismiss = { showSortSheet = false }
         )
     }
@@ -968,7 +975,7 @@ fun getPdfThumbnailPath(context: Context, filePath: String): String? {
         val file = File(filePath)
         if (!file.exists() || !file.canRead()) return null
         
-        val cacheKey = "thumb_" + file.nameWithoutExtension.hashCode() + "_" + file.lastModified() + ".png"
+        val cacheKey = "thumb_w_" + file.nameWithoutExtension.hashCode() + "_" + file.lastModified() + ".png"
         val cacheFile = File(context.cacheDir, cacheKey)
         if (cacheFile.exists()) {
             return cacheFile.absolutePath
@@ -981,6 +988,8 @@ fun getPdfThumbnailPath(context: Context, filePath: String): String? {
             val width = 150
             val height = (width.toFloat() / page.width * page.height).toInt().coerceAtLeast(100)
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bitmap)
+            canvas.drawColor(android.graphics.Color.WHITE)
             page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
             page.close()
             renderer.close()
@@ -2233,6 +2242,65 @@ fun SettingsSelectionRow(
 // CUSTOM BOTTOM BAR (Image 5 & 2 Style)
 // ==========================================
 @Composable
+fun HomeSmileIcon(
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val strokeWidth = 2.dp.toPx()
+        
+        // Define points for the house outline
+        val left = strokeWidth / 2f + 1.dp.toPx()
+        val right = w - strokeWidth / 2f - 1.dp.toPx()
+        val top = strokeWidth / 2f + 2.dp.toPx()
+        val bottom = h - strokeWidth / 2f - 1.dp.toPx()
+        val midY = h * 0.45f
+        val centerX = w / 2f
+        
+        val path = Path().apply {
+            moveTo(left, bottom)
+            lineTo(left, midY)
+            lineTo(centerX, top)
+            lineTo(right, midY)
+            lineTo(right, bottom)
+            close()
+        }
+        
+        // Draw the house outline with rounded joints and caps
+        drawPath(
+            path = path,
+            color = tint,
+            style = Stroke(
+                width = strokeWidth,
+                join = StrokeJoin.Round,
+                cap = StrokeCap.Round
+            )
+        )
+        
+        // Draw the smile arc centered horizontally in the lower half of the house
+        val smileWidth = w * 0.42f
+        val smileHeight = h * 0.22f
+        val smileLeft = centerX - smileWidth / 2f
+        val smileTop = h * 0.52f
+        
+        drawArc(
+            color = tint,
+            startAngle = 10f,
+            sweepAngle = 160f,
+            useCenter = false,
+            topLeft = Offset(smileLeft, smileTop),
+            size = Size(smileWidth, smileHeight),
+            style = Stroke(
+                width = strokeWidth,
+                cap = StrokeCap.Round
+            )
+        )
+    }
+}
+
+@Composable
 fun CustomBottomBar(
     selectedTab: DashboardTab,
     showTools: Boolean,
@@ -2285,51 +2353,73 @@ fun CustomBottomBar(
             // Settings Tab
             BottomTabItem(
                 selected = selectedTab == DashboardTab.Settings,
-                icon = Icons.Outlined.Settings,
-                selectedIcon = Icons.Filled.Settings,
-                label = "الإعدادات",
                 onSelectedColor = onSelectedColor,
                 unselectedColor = unselectedColor,
                 selectedContainerColor = selectedContainerColor,
-                onClick = { onTabSelected(DashboardTab.Settings) }
+                onClick = { onTabSelected(DashboardTab.Settings) },
+                label = "الإعدادات",
+                icon = { tint ->
+                    Icon(
+                        imageVector = if (selectedTab == DashboardTab.Settings) Icons.Filled.Settings else Icons.Outlined.Settings,
+                        contentDescription = "الإعدادات",
+                        tint = tint,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             )
 
             // Tools Tab (only display if showTools is active)
             if (showTools) {
                 BottomTabItem(
                     selected = selectedTab == DashboardTab.Tools,
-                    icon = Icons.Outlined.Construction,
-                    selectedIcon = Icons.Filled.Construction,
-                    label = "الأدوات",
                     onSelectedColor = onSelectedColor,
                     unselectedColor = unselectedColor,
                     selectedContainerColor = selectedContainerColor,
-                    onClick = { onTabSelected(DashboardTab.Tools) }
+                    onClick = { onTabSelected(DashboardTab.Tools) },
+                    label = "الأدوات",
+                    icon = { tint ->
+                        Icon(
+                            imageVector = if (selectedTab == DashboardTab.Tools) Icons.Filled.Construction else Icons.Outlined.Construction,
+                            contentDescription = "الأدوات",
+                            tint = tint,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 )
             }
 
             // Folders Tab
             BottomTabItem(
                 selected = selectedTab == DashboardTab.Folders,
-                icon = Icons.Outlined.Folder,
-                selectedIcon = Icons.Filled.Folder,
-                label = "المجلدات",
                 onSelectedColor = onSelectedColor,
                 unselectedColor = unselectedColor,
                 selectedContainerColor = selectedContainerColor,
-                onClick = { onTabSelected(DashboardTab.Folders) }
+                onClick = { onTabSelected(DashboardTab.Folders) },
+                label = "المجلدات",
+                icon = { tint ->
+                    Icon(
+                        imageVector = if (selectedTab == DashboardTab.Folders) Icons.Filled.Description else Icons.Outlined.Description,
+                        contentDescription = "المجلدات",
+                        tint = tint,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             )
 
             // Home Tab
             BottomTabItem(
                 selected = selectedTab == DashboardTab.Home,
-                icon = Icons.Outlined.Home,
-                selectedIcon = Icons.Filled.Home,
-                label = "الرئيسية",
                 onSelectedColor = onSelectedColor,
                 unselectedColor = unselectedColor,
                 selectedContainerColor = selectedContainerColor,
-                onClick = { onTabSelected(DashboardTab.Home) }
+                onClick = { onTabSelected(DashboardTab.Home) },
+                label = "الرئيسية",
+                icon = { tint ->
+                    HomeSmileIcon(
+                        tint = tint,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             )
         }
     }
@@ -2338,47 +2428,34 @@ fun CustomBottomBar(
 @Composable
 fun BottomTabItem(
     selected: Boolean,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
     onSelectedColor: Color,
     unselectedColor: Color,
     selectedContainerColor: Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    label: String,
+    icon: @Composable (tint: Color) -> Unit
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+    Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(16.dp))
             .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-            .testTag("tab_${label}")
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .testTag("tab_${label}"),
+        contentAlignment = Alignment.Center
     ) {
+        val tint = if (selected) onSelectedColor else unselectedColor
         // Smooth scaling bubble selection accent
         Box(
             modifier = Modifier
-                .size(width = 48.dp, height = 28.dp)
+                .size(width = 48.dp, height = 32.dp)
                 .background(
                     if (selected) selectedContainerColor else Color.Transparent,
                     RoundedCornerShape(16.dp)
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = if (selected) selectedIcon else icon,
-                contentDescription = label,
-                tint = if (selected) onSelectedColor else unselectedColor,
-                modifier = Modifier.size(20.dp)
-            )
+            icon(tint)
         }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium,
-            color = if (selected) onSelectedColor else unselectedColor
-        )
     }
 }
 

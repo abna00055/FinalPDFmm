@@ -123,7 +123,9 @@ class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
 
     val recentPdfs = recentPdfDao.getAllRecentPdfs()
 
-    fun setSortOption(option: SortOption) {
+    fun setSortOption(context: Context, option: SortOption) {
+        val prefs = context.getSharedPreferences("pdf_reader_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("sort_option", option.name).apply()
         _uiState.update { it.copy(sortOption = option) }
     }
 
@@ -442,6 +444,8 @@ class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
         val showTools = prefs.getBoolean("show_tools_tab", true)
         val theme = prefs.getString("app_theme", "system") ?: "system"
         val bottomBarColorIdx = prefs.getInt("bottom_bar_color_index", 0)
+        val sortOptName = prefs.getString("sort_option", SortOption.ALPHA_ASC.name) ?: SortOption.ALPHA_ASC.name
+        val sortOpt = try { SortOption.valueOf(sortOptName) } catch(e: Exception) { SortOption.ALPHA_ASC }
         
         val starredSet = prefs.getStringSet("starred_pdfs", emptySet()) ?: emptySet()
         
@@ -455,6 +459,7 @@ class PdfViewModel(private val recentPdfDao: RecentPdfDao) : ViewModel() {
                 starredPdfs = starredSet,
                 appTheme = theme,
                 bottomBarColorIndex = bottomBarColorIdx,
+                sortOption = sortOpt,
                 currentScreen = nextScreen
             )
         }
