@@ -8,6 +8,11 @@ import android.view.WindowManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import android.print.PrintManager
 import android.print.PrintDocumentAdapter
@@ -248,7 +253,11 @@ fun ViewerScreen(
 
     // Back button handler
     BackHandler {
-        viewModel.goBackToDashboard()
+        if (state.isEditMode) {
+            viewModel.toggleEditMode(false)
+        } else {
+            viewModel.goBackToDashboard()
+        }
     }
 
     // Programmatic screen keep-awake
@@ -495,67 +504,82 @@ fun ViewerScreen(
                         .fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Sleek circular-dock style Bottom bar with 6 beautifully labeled items
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("native_bottom_bar"),
-                        shape = RoundedCornerShape(28.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                        tonalElevation = 10.dp
-                    ) {
-                        Row(
+                    if (state.isEditMode) {
+                        EditBottomBar(
+                            state = state,
+                            viewModel = viewModel
+                        )
+                    } else {
+                        // Sleek circular-dock style Bottom bar with 7 beautifully labeled items
+                        Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 6.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceEvenly
+                                .testTag("native_bottom_bar"),
+                            shape = RoundedCornerShape(28.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                            tonalElevation = 10.dp
                         ) {
-                            val isBookmarked = state.bookmarkedPages.contains(state.currentPage)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 6.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                val isBookmarked = state.bookmarkedPages.contains(state.currentPage)
 
-                            BottomBarItem(
-                                icon = Icons.Default.MenuBook,
-                                label = "الصفحات",
-                                onClick = { activeSheet = BottomSheetType.DocumentNavigation },
-                                tint = Color(0xFF4CB050), // Green
-                                modifier = Modifier.weight(1f)
-                            )
-                            BottomBarItem(
-                                icon = if (state.scrollMode == "horizontal") Icons.Default.ViewCarousel else Icons.Default.ViewStream,
-                                label = "العرض",
-                                onClick = { activeSheet = BottomSheetType.ViewOptions },
-                                tint = Color(0xFF03A9F4), // Light Blue
-                                modifier = Modifier.weight(1f)
-                            )
-                            BottomBarItem(
-                                icon = Icons.Default.ZoomIn,
-                                label = "الزووم",
-                                onClick = { activeSheet = BottomSheetType.ZoomSettings },
-                                tint = Color(0xFFFF9800), // Orange
-                                modifier = Modifier.weight(1f)
-                            )
-                            BottomBarItem(
-                                icon = Icons.Default.Palette,
-                                label = "السمات",
-                                onClick = { activeSheet = BottomSheetType.DisplaySettings },
-                                tint = Color(0xFF9C27B0), // Purple
-                                modifier = Modifier.weight(1f)
-                            )
-                            BottomBarItem(
-                                icon = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                                label = "إشارة",
-                                onClick = { viewModel.toggleBookmark(context, state.currentPage) },
-                                tint = if (isBookmarked) Color(0xFFE91E63) else Color(0xFFE91E63).copy(alpha = 0.5f), // Pink
-                                modifier = Modifier.weight(1f)
-                            )
-                            BottomBarItem(
-                                icon = Icons.Default.MoreHoriz,
-                                label = "أدوات",
-                                onClick = { activeSheet = BottomSheetType.MoreOptions },
-                                tint = Color(0xFF009688), // Teal
-                                modifier = Modifier.weight(1f)
-                            )
+                                BottomBarItem(
+                                    icon = Icons.Default.MenuBook,
+                                    label = "الصفحات",
+                                    onClick = { activeSheet = BottomSheetType.DocumentNavigation },
+                                    tint = Color(0xFF4CB050), // Green
+                                    modifier = Modifier.weight(1f)
+                                )
+                                BottomBarItem(
+                                    icon = if (state.scrollMode == "horizontal") Icons.Default.ViewCarousel else Icons.Default.ViewStream,
+                                    label = "العرض",
+                                    onClick = { activeSheet = BottomSheetType.ViewOptions },
+                                    tint = Color(0xFF03A9F4), // Light Blue
+                                    modifier = Modifier.weight(1f)
+                                )
+                                BottomBarItem(
+                                    icon = Icons.Default.ZoomIn,
+                                    label = "الزووم",
+                                    onClick = { activeSheet = BottomSheetType.ZoomSettings },
+                                    tint = Color(0xFFFF9800), // Orange
+                                    modifier = Modifier.weight(1f)
+                                )
+                                BottomBarItem(
+                                    icon = Icons.Default.Palette,
+                                    label = "السمات",
+                                    onClick = { activeSheet = BottomSheetType.DisplaySettings },
+                                    tint = Color(0xFF9C27B0), // Purple
+                                    modifier = Modifier.weight(1f)
+                                )
+                                BottomBarItem(
+                                    icon = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                    label = "إشارة",
+                                    onClick = { viewModel.toggleBookmark(context, state.currentPage) },
+                                    tint = if (isBookmarked) Color(0xFFE91E63) else Color(0xFFE91E63).copy(alpha = 0.5f), // Pink
+                                    modifier = Modifier.weight(1f)
+                                )
+                                BottomBarItem(
+                                    icon = Icons.Default.Edit,
+                                    label = "تحرير",
+                                    onClick = { viewModel.toggleEditMode(true) },
+                                    tint = Color(0xFF00BCD4), // Cyan-blue
+                                    isSelected = state.isEditMode,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                BottomBarItem(
+                                    icon = Icons.Default.MoreHoriz,
+                                    label = "أدوات",
+                                    onClick = { activeSheet = BottomSheetType.MoreOptions },
+                                    tint = Color(0xFF009688), // Teal
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                     }
                 }
@@ -743,9 +767,9 @@ fun ViewerScreen(
                         .align(Alignment.TopCenter)
                         .padding(
                             top = if (isBarsVisible) {
-                                WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 72.dp
+                                WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 60.dp
                             } else {
-                                WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 12.dp
+                                WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 6.dp
                             }
                         )
                 )
@@ -767,6 +791,27 @@ fun PdfWebView(
     val coroutineScope = rememberCoroutineScope()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
+    val filePathCallbackRef = remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
+    val fileChooserLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val data = result.data
+            val uris = if (data?.clipData != null) {
+                val count = data.clipData!!.itemCount
+                (0 until count).map { data.clipData!!.getItemAt(it).uri }.toTypedArray()
+            } else if (data?.data != null) {
+                arrayOf(data.data!!)
+            } else {
+                null
+            }
+            filePathCallbackRef.value?.onReceiveValue(uris)
+        } else {
+            filePathCallbackRef.value?.onReceiveValue(null)
+        }
+        filePathCallbackRef.value = null
+    }
+
     AndroidView(
         factory = { ctx ->
             WebView(ctx).apply {
@@ -787,6 +832,29 @@ fun PdfWebView(
                     builtInZoomControls = true
                     displayZoomControls = false
                     cacheMode = WebSettings.LOAD_NO_CACHE
+                }
+
+                webChromeClient = object : WebChromeClient() {
+                    override fun onShowFileChooser(
+                        webView: WebView?,
+                        filePathCallback: ValueCallback<Array<Uri>>?,
+                        fileChooserParams: FileChooserParams?
+                    ): Boolean {
+                        filePathCallbackRef.value?.onReceiveValue(null)
+                        filePathCallbackRef.value = filePathCallback
+                        try {
+                            val intent = fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                                type = "image/*"
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                            }
+                            fileChooserLauncher.launch(intent)
+                        } catch (e: Exception) {
+                            filePathCallback?.onReceiveValue(null)
+                            filePathCallbackRef.value = null
+                            return false
+                        }
+                        return true
+                    }
                 }
 
                 webViewClient = object : WebViewClient() {
@@ -1617,7 +1685,7 @@ fun ZoomSettingsSheet(
 
             // Fit width
             Button(
-                onClick = { viewModel.sendJsCommand("PDFViewerApplication.pdfViewer.currentScaleValue = 'page-width'") },
+                onClick = { viewModel.triggerFitWidth() },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                     contentColor = MaterialTheme.colorScheme.onSurface
@@ -1631,7 +1699,7 @@ fun ZoomSettingsSheet(
 
             // Fit page
             Button(
-                onClick = { viewModel.sendJsCommand("PDFViewerApplication.pdfViewer.currentScaleValue = 'page-fit'") },
+                onClick = { viewModel.triggerFitPage() },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                     contentColor = MaterialTheme.colorScheme.onSurface
@@ -2755,104 +2823,85 @@ fun WifiSoundWaveIndicator(
     isPlaying: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "sound_waves")
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = modifier
+    ) {
+        Icon(
+            imageVector = Icons.Default.Headset,
+            contentDescription = "سماعة",
+            tint = Color(0xFFB19DFF),
+            modifier = Modifier.size(15.dp)
+        )
+        WaveArcs(
+            isPlaying = isPlaying,
+            modifier = Modifier.size(width = 12.dp, height = 15.dp)
+        )
+    }
+}
+
+@Composable
+fun WaveArcs(
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "wave_arcs")
     val pulseProgress1 by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing),
+            animation = tween(1200, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
-        label = "pulse1"
+        label = "arc1"
     )
     val pulseProgress2 by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1000, delayMillis = 330, easing = LinearEasing),
+            animation = tween(1200, delayMillis = 600, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
-        label = "pulse2"
-    )
-    val pulseProgress3 by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, delayMillis = 660, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "pulse3"
+        label = "arc2"
     )
 
-    Canvas(modifier = modifier.size(16.dp)) {
+    Canvas(modifier = modifier) {
         val width = size.width
         val height = size.height
-        val center = Offset(width / 2f, height - 1.dp.toPx())
-
-        // Small source dot at the bottom center
-        drawCircle(
-            color = Color(0xFFB19DFF),
-            radius = 1.5.dp.toPx(),
-            center = center
-        )
-
-        val waveColor = Color(0xFFB19DFF)
         val strokeWidth = 1.25.dp.toPx()
-        val maxRadius = width - 1.dp.toPx()
+        val waveColor = Color(0xFFB19DFF)
+
+        // Draw arcs emerging from the left side (where the headset is) towards the right
+        val center = Offset(0f, height / 2f)
+        val maxRadius = width
 
         if (isPlaying) {
-            // Wave 1
-            val radius1 = 4.dp.toPx() + (maxRadius - 4.dp.toPx()) * pulseProgress1
-            val alpha1 = (1f - pulseProgress1).coerceIn(0f, 1f)
-            drawArc(
-                color = waveColor.copy(alpha = alpha1),
-                startAngle = 215f,
-                sweepAngle = 110f,
-                useCenter = false,
-                topLeft = Offset(center.x - radius1, center.y - radius1),
-                size = Size(radius1 * 2, radius1 * 2),
-                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-            )
-
-            // Wave 2
-            val radius2 = 4.dp.toPx() + (maxRadius - 4.dp.toPx()) * pulseProgress2
-            val alpha2 = (1f - pulseProgress2).coerceIn(0f, 1f)
-            drawArc(
-                color = waveColor.copy(alpha = alpha2),
-                startAngle = 215f,
-                sweepAngle = 110f,
-                useCenter = false,
-                topLeft = Offset(center.x - radius2, center.y - radius2),
-                size = Size(radius2 * 2, radius2 * 2),
-                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-            )
-
-            // Wave 3
-            val radius3 = 4.dp.toPx() + (maxRadius - 4.dp.toPx()) * pulseProgress3
-            val alpha3 = (1f - pulseProgress3).coerceIn(0f, 1f)
-            drawArc(
-                color = waveColor.copy(alpha = alpha3),
-                startAngle = 215f,
-                sweepAngle = 110f,
-                useCenter = false,
-                topLeft = Offset(center.x - radius3, center.y - radius3),
-                size = Size(radius3 * 2, radius3 * 2),
-                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-            )
-        } else {
-            // Draw 2 static faint arcs
-            for (i in 1..2) {
-                val radius = (4 * i).dp.toPx()
+            listOf(pulseProgress1, pulseProgress2).forEach { progress ->
+                val radius = 2.dp.toPx() + (maxRadius - 2.dp.toPx()) * progress
+                val alpha = (1f - progress).coerceIn(0f, 1f)
                 drawArc(
-                    color = waveColor.copy(alpha = 0.4f),
-                    startAngle = 215f,
-                    sweepAngle = 110f,
+                    color = waveColor.copy(alpha = alpha),
+                    startAngle = -45f,
+                    sweepAngle = 90f,
                     useCenter = false,
                     topLeft = Offset(center.x - radius, center.y - radius),
                     size = Size(radius * 2, radius * 2),
                     style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                 )
             }
+        } else {
+            // Static small arc when paused
+            val radius = 4.dp.toPx()
+            drawArc(
+                color = waveColor.copy(alpha = 0.5f),
+                startAngle = -45f,
+                sweepAngle = 90f,
+                useCenter = false,
+                topLeft = Offset(center.x - radius, center.y - radius),
+                size = Size(radius * 2, radius * 2),
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
         }
     }
 }
@@ -2865,10 +2914,10 @@ fun SpokenWordText(
     val trimmed = text.trim()
     val isSentence = trimmed.contains(" ") || trimmed.length > 20
     val baseFontSize = when {
-        isSentence -> 11.sp
-        trimmed.length > 15 -> 11.sp
-        trimmed.length > 10 -> 12.sp
-        else -> 14.sp
+        isSentence -> 10.sp
+        trimmed.length > 15 -> 9.sp
+        trimmed.length > 10 -> 10.sp
+        else -> 12.sp
     }
 
     if (isSentence) {
@@ -2953,16 +3002,17 @@ fun MiniPlayerOverlay(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                // Dynamic pulsing WiFi-style soundwave indicator
+                // Dynamic pulsing headset soundwave indicator
                 Box(
                     modifier = Modifier
-                        .size(30.dp)
-                        .background(Color(0xFF222031), CircleShape),
+                        .wrapContentWidth()
+                        .height(26.dp)
+                        .background(Color(0xFF222031), RoundedCornerShape(13.dp))
+                        .padding(horizontal = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     WifiSoundWaveIndicator(
-                        isPlaying = isPlaying,
-                        modifier = Modifier.size(16.dp)
+                        isPlaying = isPlaying
                     )
                 }
 
@@ -2979,46 +3029,315 @@ fun MiniPlayerOverlay(
                 }
             }
 
-            // Right side: Clean minimal actions (no background halo / circle)
+            // Right side: Clean actions with separated small circular halos (backgrounds)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Replay Button (Standalone clean icon)
+                // Replay Button with separate small halo background
                 IconButton(
                     onClick = onReplay,
                     enabled = !isLoading,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier
+                        .size(28.dp)
+                        .background(Color(0xFF222031), CircleShape)
                 ) {
                     if (isLoading) {
                         CircularProgressIndicator(
                             color = Color(0xFFB19DFF),
-                            strokeWidth = 1.5.dp,
-                            modifier = Modifier.size(14.dp)
+                            strokeWidth = 1.2.dp,
+                            modifier = Modifier.size(12.dp)
                         )
                     } else {
                         Icon(
                             imageVector = Icons.Default.Replay,
                             contentDescription = "إعادة النطق",
                             tint = Color(0xFFB19DFF),
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(14.dp)
                         )
                     }
                 }
 
-                // Delete Button (Standalone clean icon)
+                // Delete Button with separate small halo background
                 IconButton(
                     onClick = onDismiss,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier
+                        .size(28.dp)
+                        .background(Color(0xFF2B1C1C), CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "حذف المشغل",
                         tint = Color(0xFFFF8A80),
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(14.dp)
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+fun EditBottomBar(
+    state: PdfUiState,
+    viewModel: PdfViewModel,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f), RoundedCornerShape(24.dp))
+            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)), RoundedCornerShape(24.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Quick Controls Drawer (Colors & Sliders) - only shown when a valid tool is active
+        if (state.activeEditTool != "none" && state.activeEditTool != "image") {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Color Palette Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "اللون",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    val colors = listOf(
+                        "#FFFF00" to Color(0xFFFFFF00), // Yellow
+                        "#4CAF50" to Color(0xFF4CAF50), // Green
+                        "#2196F3" to Color(0xFF2196F3), // Blue
+                        "#F44336" to Color(0xFFF44336), // Red
+                        "#E91E63" to Color(0xFFE91E63), // Pink
+                        "#000000" to Color(0xFF000000), // Black
+                        "#FFFFFF" to Color(0xFFFFFFFF)  // White
+                    )
+                    
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        colors.forEach { (hex, composeColor) ->
+                            val isSelected = state.editColor.equals(hex, ignoreCase = true)
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(composeColor)
+                                    .border(
+                                        width = if (isSelected) 2.dp else 1.dp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f),
+                                        shape = CircleShape
+                                    )
+                                    .clickable { viewModel.setEditColor(hex) }
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                // Thickness Slider (not applicable for Text tool, but highly relevant for Pen/Highlighter)
+                if (state.activeEditTool == "pen" || state.activeEditTool == "highlighter") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "السماكة",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.width(50.dp)
+                        )
+                        Slider(
+                            value = state.editThickness,
+                            onValueChange = { viewModel.setEditThickness(it) },
+                            valueRange = 1f..30f,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "${state.editThickness.toInt()}px",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+
+                // Opacity Slider
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "العتامة",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.width(50.dp)
+                    )
+                    Slider(
+                        value = state.editOpacity,
+                        onValueChange = { viewModel.setEditOpacity(it) },
+                        valueRange = 0f..100f,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "${state.editOpacity.toInt()}%",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        } else if (state.activeEditTool == "text") {
+            // Text tool specific options: just color selection for quick text colors
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "لون الخط",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                val colors = listOf(
+                    "#000000" to Color(0xFF000000), // Black
+                    "#F44336" to Color(0xFFF44336), // Red
+                    "#2196F3" to Color(0xFF2196F3), // Blue
+                    "#4CAF50" to Color(0xFF4CAF50), // Green
+                    "#FFFF00" to Color(0xFFFFFF00)  // Yellow
+                )
+                
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    colors.forEach { (hex, composeColor) ->
+                        val isSelected = state.editColor.equals(hex, ignoreCase = true)
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(composeColor)
+                                .border(
+                                    width = if (isSelected) 2.dp else 1.dp,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f),
+                                    shape = CircleShape
+                                )
+                                .clickable { viewModel.setEditColor(hex) }
+                        )
+                    }
+                }
+            }
+        }
+
+        if (state.activeEditTool != "none") {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        }
+
+        // Active tools bar row (The core edit action bottom bar)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            // Free draw (Pen)
+            EditToolItem(
+                icon = Icons.Default.Create,
+                label = "الرسم الحر",
+                isSelected = state.activeEditTool == "pen",
+                onClick = { viewModel.setEditTool("pen") }
+            )
+
+            // Text T
+            EditToolItem(
+                icon = Icons.Default.TextFields,
+                label = "نص",
+                isSelected = state.activeEditTool == "text",
+                onClick = { viewModel.setEditTool("text") }
+            )
+
+            // Highlighter
+            EditToolItem(
+                icon = Icons.Default.Highlight,
+                label = "تحديد",
+                isSelected = state.activeEditTool == "highlighter",
+                onClick = { viewModel.setEditTool("highlighter") }
+            )
+
+            // Image
+            EditToolItem(
+                icon = Icons.Default.Image,
+                label = "إدراج صورة",
+                isSelected = state.activeEditTool == "image",
+                onClick = { viewModel.setEditTool("image") }
+            )
+
+            // Clear active tool button
+            if (state.activeEditTool != "none") {
+                EditToolItem(
+                    icon = Icons.Default.Block,
+                    label = "تعطيل الأداة",
+                    isSelected = false,
+                    onClick = { viewModel.setEditTool("none") },
+                    tint = Color.Red.copy(alpha = 0.7f)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(4.dp))
+
+            // Save/Done button
+            Button(
+                onClick = { viewModel.toggleEditMode(false) },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = Color.White
+                ),
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+            ) {
+                Text(text = "تم", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+fun EditToolItem(
+    icon: ImageVector,
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    tint: Color = MaterialTheme.colorScheme.onSurface
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(40.dp)
+            .background(
+                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                shape = RoundedCornerShape(8.dp)
+            )
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = if (isSelected) MaterialTheme.colorScheme.primary else tint,
+            modifier = Modifier.size(20.dp)
+        )
     }
 }

@@ -2,6 +2,7 @@ package com.example
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -23,6 +24,7 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+    PDFBoxResourceLoader.init(applicationContext)
 
     val database = PdfDatabase.getDatabase(applicationContext)
     val viewModel: PdfViewModel by viewModels {

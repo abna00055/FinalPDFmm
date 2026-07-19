@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -391,7 +392,7 @@ fun HomeTabScreen(
 
             // Two Premium Header Icons (Stats & Sort) - Separated Circular Buttons
             Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Statistics Icon Button
@@ -928,7 +929,9 @@ fun PdfThumbnail(
                 AsyncImage(
                     model = thumbnailPath,
                     contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.White),
                     contentScale = ContentScale.Crop
                 )
             } else {
@@ -1626,12 +1629,55 @@ fun FolderStatColumn(num: Int, label: String) {
 }
 
 // ==========================================
-// TOOLS TAB SCREEN (Image 3)
+// TOOLS TAB SCREEN
 // ==========================================
+enum class ActiveTool {
+    None,
+    Merge,
+    Split,
+    Compress,
+    Rotate,
+    Reorder,
+    DeletePages,
+    ImageToPdf,
+    PdfToImages,
+    LockPdf,
+    UnlockPdf
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ToolsTabScreen(viewModel: PdfViewModel) {
     val context = LocalContext.current
-    var selectedToolName by remember { mutableStateOf<String?>(null) }
+    val uiState by viewModel.uiState.collectAsState()
+    var activeTool by remember { mutableStateOf(ActiveTool.None) }
+    
+    // States for wizards
+    var targetFileName by remember { mutableStateOf("") }
+    var selectedFilePaths by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var selectedSingleFilePath by remember { mutableStateOf("") }
+    
+    // Tool-specific inputs
+    var splitFromPage by remember { mutableStateOf("1") }
+    var splitToPage by remember { mutableStateOf("1") }
+    var compressionLevel by remember { mutableStateOf("medium") } // "low", "medium", "high"
+    var rotateDegrees by remember { mutableStateOf(90) }
+    var rotateTargetPage by remember { mutableStateOf("-1") } // "-1" for all, or 1-based page index
+    var reorderSequence by remember { mutableStateOf("") } // e.g. "3, 1, 2"
+    var deletePagesSetInput by remember { mutableStateOf("") } // e.g. "2, 4"
+    
+    // New tools inputs
+    var selectedImagePaths by remember { mutableStateOf<List<String>>(emptyList()) }
+    var pdfToImagesFormat by remember { mutableStateOf("PNG") }
+    var pdfToImagesPages by remember { mutableStateOf("") }
+    var lockPassword by remember { mutableStateOf("") }
+    var lockAllowPrinting by remember { mutableStateOf(true) }
+    var lockAllowCopying by remember { mutableStateOf(true) }
+    var lockAllowModifying by remember { mutableStateOf(true) }
+    var lockAllowAnnotations by remember { mutableStateOf(true) }
+    var unlockPassword by remember { mutableStateOf("") }
+    
+    var isProcessing by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -1646,7 +1692,7 @@ fun ToolsTabScreen(viewModel: PdfViewModel) {
             modifier = Modifier.padding(bottom = 4.dp)
         )
         Text(
-            text = "مجموعة من الأدوات الذكية لتعديل وتخصيص مستنداتك",
+            text = "أدوات ذكية حقيقية لتعديل وتخصيص مستنداتك وحفظها فوراً",
             fontSize = 12.sp,
             color = Color.Gray,
             modifier = Modifier.padding(bottom = 16.dp)
@@ -1664,19 +1710,29 @@ fun ToolsTabScreen(viewModel: PdfViewModel) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     ToolGridCard(
                         title = "دمج ملفات PDF",
-                        desc = "دمج مستندات متعددة في ملف واحد",
+                        desc = "دمج عدة ملفات في ملف واحد مخصص",
                         icon = Icons.Default.MergeType,
                         color = Color(0xFFE6E0FF),
                         modifier = Modifier.weight(1f),
-                        onClick = { selectedToolName = "دمج ملفات PDF" }
+                        onClick = {
+                            activeTool = ActiveTool.Merge
+                            targetFileName = "دمج_المستندات"
+                            selectedFilePaths = emptySet()
+                        }
                     )
                     ToolGridCard(
                         title = "تقسيم ملف PDF",
-                        desc = "تقسيم مستند كبير لملفات منفصلة",
+                        desc = "استخراج صفحات محددة لملف جديد",
                         icon = Icons.Default.CallSplit,
                         color = Color(0xFFFFF9C4),
                         modifier = Modifier.weight(1f),
-                        onClick = { selectedToolName = "تقسيم ملف PDF" }
+                        onClick = {
+                            activeTool = ActiveTool.Split
+                            targetFileName = "تقسيم_الملف"
+                            selectedSingleFilePath = uiState.allPdfFiles.firstOrNull()?.filePath ?: ""
+                            splitFromPage = "1"
+                            splitToPage = "1"
+                        }
                     )
                 }
             }
@@ -1684,92 +1740,1352 @@ fun ToolsTabScreen(viewModel: PdfViewModel) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     ToolGridCard(
                         title = "ضغط ملف PDF",
-                        desc = "تصغير حجم الملف بأعلى جودة",
+                        desc = "تصغير الحجم بكفاءة عالية للحفظ والمشاركة",
                         icon = Icons.Default.Compress,
                         color = Color(0xFFF1EEFF),
                         modifier = Modifier.weight(1f),
-                        onClick = { selectedToolName = "ضغط ملف PDF" }
+                        onClick = {
+                            activeTool = ActiveTool.Compress
+                            targetFileName = "الملف_المضغوط"
+                            selectedSingleFilePath = uiState.allPdfFiles.firstOrNull()?.filePath ?: ""
+                            compressionLevel = "medium"
+                        }
                     )
                     ToolGridCard(
                         title = "تدوير الصفحات",
-                        desc = "تعديل اتجاه صفحات الـ PDF",
+                        desc = "تغيير اتجاه لصفحة معينة أو كل الصفحات",
                         icon = Icons.Default.RotateRight,
                         color = Color(0xFFFFF9C4),
                         modifier = Modifier.weight(1f),
-                        onClick = { selectedToolName = "تدوير الصفحات" }
+                        onClick = {
+                            activeTool = ActiveTool.Rotate
+                            targetFileName = "الملف_المعدل"
+                            selectedSingleFilePath = uiState.allPdfFiles.firstOrNull()?.filePath ?: ""
+                            rotateDegrees = 90
+                            rotateTargetPage = "-1"
+                        }
                     )
                 }
             }
 
-            // CONVERT & EDIT SECTION
+            // ADVANCED EDIT SECTION
             item {
-                ToolSectionHeader(title = "أدوات التعديل والتحويل")
+                ToolSectionHeader(title = "إعادة الترتيب والحذف")
             }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     ToolGridCard(
-                        title = "صور إلى PDF",
-                        desc = "تحويل ألبوم الصور لمستند PDF",
-                        icon = Icons.Default.Image,
-                        color = Color(0xFFFFF9C4),
-                        modifier = Modifier.weight(1f),
-                        onClick = { selectedToolName = "صور إلى PDF" }
-                    )
-                    ToolGridCard(
-                        title = "حماية ملف PDF",
-                        desc = "تشفير الملف بكلمة مرور آمنة",
-                        icon = Icons.Default.Lock,
+                        title = "إعادة ترتيب الصفحات",
+                        desc = "تنظيم تسلسل الصفحات حسب رغبتك",
+                        icon = Icons.Default.List,
                         color = Color(0xFFE6E0FF),
                         modifier = Modifier.weight(1f),
-                        onClick = { selectedToolName = "تشفير وحماية ملف PDF" }
+                        onClick = {
+                            activeTool = ActiveTool.Reorder
+                            targetFileName = "الملف_المرتب"
+                            selectedSingleFilePath = uiState.allPdfFiles.firstOrNull()?.filePath ?: ""
+                            reorderSequence = ""
+                        }
+                    )
+                    ToolGridCard(
+                        title = "حذف الصفحات",
+                        desc = "إزالة صفحة واحدة أو أكثر من المستند",
+                        icon = Icons.Default.Delete,
+                        color = Color(0xFFFFD1D1),
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            activeTool = ActiveTool.DeletePages
+                            targetFileName = "الملف_بعد_الحذف"
+                            selectedSingleFilePath = uiState.allPdfFiles.firstOrNull()?.filePath ?: ""
+                            deletePagesSetInput = ""
+                        }
+                    )
+                }
+            }
+
+            // CONVERT AND SECURE SECTION
+            item {
+                ToolSectionHeader(title = "التحويل وتأمين الملفات")
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ToolGridCard(
+                        title = "صورة إلى PDF",
+                        desc = "تحويل مجموعة صور إلى ملف PDF واحد مخصص",
+                        icon = Icons.Default.Image,
+                        color = Color(0xFFE1F5FE),
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            activeTool = ActiveTool.ImageToPdf
+                            targetFileName = "صور_محولة"
+                            selectedImagePaths = emptyList()
+                        }
+                    )
+                    ToolGridCard(
+                        title = "PDF إلى صور",
+                        desc = "تصدير صفحات ملف PDF كصور مستقلة",
+                        icon = Icons.Default.Collections,
+                        color = Color(0xFFE8F5E9),
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            activeTool = ActiveTool.PdfToImages
+                            selectedSingleFilePath = uiState.allPdfFiles.firstOrNull()?.filePath ?: ""
+                            pdfToImagesFormat = "PNG"
+                            pdfToImagesPages = ""
+                        }
+                    )
+                }
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ToolGridCard(
+                        title = "قفل ملف PDF",
+                        desc = "حماية وتشفير المستند بكلمة سر مخصصة",
+                        icon = Icons.Default.Lock,
+                        color = Color(0xFFFFEBEE),
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            activeTool = ActiveTool.LockPdf
+                            selectedSingleFilePath = uiState.allPdfFiles.firstOrNull()?.filePath ?: ""
+                            lockPassword = ""
+                            lockAllowPrinting = true
+                            lockAllowCopying = true
+                            lockAllowModifying = true
+                            lockAllowAnnotations = true
+                            targetFileName = "ملف_محمي"
+                        }
+                    )
+                    ToolGridCard(
+                        title = "فتح ملف PDF",
+                        desc = "إزالة كلمة السر والحماية من مستند مشفر",
+                        icon = Icons.Default.LockOpen,
+                        color = Color(0xFFFFF3E0),
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            activeTool = ActiveTool.UnlockPdf
+                            selectedSingleFilePath = uiState.allPdfFiles.firstOrNull()?.filePath ?: ""
+                            unlockPassword = ""
+                            targetFileName = "ملف_مفتوح"
+                        }
                     )
                 }
             }
         }
     }
 
-    // Interactive Tool Simulation Dialog (prevents dead-ends)
-    if (selectedToolName != null) {
+    // Dialog / Sheet for Merge Tool
+    if (activeTool == ActiveTool.Merge) {
         AlertDialog(
-            onDismissRequest = { selectedToolName = null },
+            onDismissRequest = { if (!isProcessing) activeTool = ActiveTool.None },
+            title = { Text("دمج ملفات PDF", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 350.dp)
+                ) {
+                    Text("اختر ملفات الـ PDF التي ترغب في دمجها بالترتيب المناسب:", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
+                    
+                    OutlinedTextField(
+                        value = targetFileName,
+                        onValueChange = { targetFileName = it },
+                        label = { Text("اسم الملف الناتج") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    )
+
+                    if (uiState.allPdfFiles.isEmpty()) {
+                        Text("لا يوجد ملفات PDF متوفرة في مكتبتك حالياً للدمج.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(uiState.allPdfFiles) { file ->
+                                val isSelected = selectedFilePaths.contains(file.filePath)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            selectedFilePaths = if (isSelected) {
+                                                selectedFilePaths - file.filePath
+                                            } else {
+                                                selectedFilePaths + file.filePath
+                                            }
+                                        }
+                                        .background(
+                                            if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                                            else Color.Transparent,
+                                            RoundedCornerShape(8.dp)
+                                        )
+                                        .padding(8.dp)
+                                ) {
+                                    Checkbox(
+                                        checked = isSelected,
+                                        onCheckedChange = {
+                                            selectedFilePaths = if (isSelected) {
+                                                selectedFilePaths - file.filePath
+                                            } else {
+                                                selectedFilePaths + file.filePath
+                                            }
+                                        }
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(file.fileName, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                        Text("${file.fileSize} - ${file.folderName}", fontSize = 11.sp, color = Color.Gray)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (isProcessing) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("جاري دمج وحفظ الملف...", fontSize = 13.sp)
+                        }
+                    }
+                }
+            },
             confirmButton = {
                 Button(
                     onClick = {
-                        selectedToolName = null
-                        Toast.makeText(context, "تمت العملية بنجاح وحفظ الملف في المجلد الجديد!", Toast.LENGTH_LONG).show()
-                    }
+                        if (targetFileName.trim().isEmpty()) {
+                            Toast.makeText(context, "الرجاء إدخال اسم للملف الناتج", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (selectedFilePaths.size < 2) {
+                            Toast.makeText(context, "الرجاء اختيار ملفين على الأقل للدمج", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        isProcessing = true
+                        viewModel.mergePdfs(
+                            context = context,
+                            filePaths = selectedFilePaths.toList(),
+                            targetName = targetFileName,
+                            onSuccess = { path ->
+                                isProcessing = false
+                                activeTool = ActiveTool.None
+                                Toast.makeText(context, "تم دمج الملفات بنجاح وحفظها في: $path", Toast.LENGTH_LONG).show()
+                            },
+                            onError = { err ->
+                                isProcessing = false
+                                Toast.makeText(context, "خطأ: $err", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    },
+                    enabled = !isProcessing && selectedFilePaths.size >= 2
                 ) {
-                    Text("ابدأ التشغيل الآن")
+                    Text("دمج المستندات")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { selectedToolName = null }) {
+                TextButton(onClick = { activeTool = ActiveTool.None }, enabled = !isProcessing) {
                     Text("إلغاء")
                 }
-            },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Construction,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(36.dp)
-                )
-            },
-            title = {
-                Text(
-                    text = selectedToolName ?: "",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-            },
+            }
+        )
+    }
+
+    // Dialog / Sheet for Split Tool
+    if (activeTool == ActiveTool.Split) {
+        var dropdownExpanded by remember { mutableStateOf(false) }
+        val selectedFile = uiState.allPdfFiles.find { it.filePath == selectedSingleFilePath }
+        
+        AlertDialog(
+            onDismissRequest = { if (!isProcessing) activeTool = ActiveTool.None },
+            title = { Text("تقسيم ملف PDF", fontWeight = FontWeight.Bold) },
             text = {
-                Text(
-                    text = "سيقوم التطبيق بالاتصال بمكتبات المعالجة المحلية لبدء تنفيذ عملية (${selectedToolName}) على الملف المختار. هل تود الاستمرار وتحديد ملف البدء؟",
-                    fontSize = 13.sp,
-                    color = Color.Gray,
-                    lineHeight = 18.sp,
-                    textAlign = TextAlign.Start
-                )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("اختر الملف والصفحات المراد استخراجها في ملف جديد منفصل:", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
+                    
+                    // Single File Picker Dropdown
+                    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                        OutlinedButton(
+                            onClick = { dropdownExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Text(selectedFile?.fileName ?: "اختر الملف المراد تقسيمه...", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Icon(Icons.Default.ArrowDropDown, null)
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.85f)
+                        ) {
+                            uiState.allPdfFiles.forEach { file ->
+                                DropdownMenuItem(
+                                    text = { Text(file.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    onClick = {
+                                        selectedSingleFilePath = file.filePath
+                                        targetFileName = "${file.fileName}_مقتطع"
+                                        dropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = targetFileName,
+                        onValueChange = { targetFileName = it },
+                        label = { Text("اسم الملف الناتج") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = splitFromPage,
+                            onValueChange = { splitFromPage = it },
+                            label = { Text("من صفحة") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = splitToPage,
+                            onValueChange = { splitToPage = it },
+                            label = { Text("إلى صفحة") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    if (isProcessing) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("جاري معالجة وتصدير الملف...", fontSize = 13.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val from = splitFromPage.toIntOrNull()
+                        val to = splitToPage.toIntOrNull()
+                        if (selectedSingleFilePath.isEmpty()) {
+                            Toast.makeText(context, "الرجاء اختيار ملف أولاً", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (targetFileName.trim().isEmpty()) {
+                            Toast.makeText(context, "الرجاء إدخال اسم للملف الناتج", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (from == null || to == null || from < 1 || to < from) {
+                            Toast.makeText(context, "الرجاء إدخال أرقام صفحات صحيحة (من صفحة يجب أن تكون أصغر من أو تساوي إلى صفحة)", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        isProcessing = true
+                        viewModel.splitPdf(
+                            context = context,
+                            filePath = selectedSingleFilePath,
+                            fromPage = from,
+                            toPage = to,
+                            targetName = targetFileName,
+                            onSuccess = { path ->
+                                isProcessing = false
+                                activeTool = ActiveTool.None
+                                Toast.makeText(context, "تم تقسيم الملف وحفظ الصفحات في: $path", Toast.LENGTH_LONG).show()
+                            },
+                            onError = { err ->
+                                isProcessing = false
+                                Toast.makeText(context, "خطأ: $err", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    },
+                    enabled = !isProcessing && selectedSingleFilePath.isNotEmpty()
+                ) {
+                    Text("تقسيم وحفظ")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { activeTool = ActiveTool.None }, enabled = !isProcessing) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    // Dialog / Sheet for Compress Tool
+    if (activeTool == ActiveTool.Compress) {
+        var dropdownExpanded by remember { mutableStateOf(false) }
+        val selectedFile = uiState.allPdfFiles.find { it.filePath == selectedSingleFilePath }
+
+        AlertDialog(
+            onDismissRequest = { if (!isProcessing) activeTool = ActiveTool.None },
+            title = { Text("ضغط ملف PDF", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("قم بتقليل حجم الملف مع الحفاظ على أعلى جودة قراءة:", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
+
+                    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                        OutlinedButton(
+                            onClick = { dropdownExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Text(selectedFile?.fileName ?: "اختر الملف المراد ضغطه...", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Icon(Icons.Default.ArrowDropDown, null)
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.85f)
+                        ) {
+                            uiState.allPdfFiles.forEach { file ->
+                                DropdownMenuItem(
+                                    text = { Text(file.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    onClick = {
+                                        selectedSingleFilePath = file.filePath
+                                        targetFileName = "${file.fileName}_مضغوط"
+                                        dropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = targetFileName,
+                        onValueChange = { targetFileName = it },
+                        label = { Text("اسم الملف الناتج") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    )
+
+                    Text("قوة الضغط المطلوبة:", fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            Triple("low", "منخفضة (جودة عالية)", Color(0xFFD4EDDA)),
+                            Triple("medium", "متوسطة (أفضل توازن)", Color(0xFFFFF3CD)),
+                            Triple("high", "عالية (أصغر حجم)", Color(0xFFF8D7DA))
+                        ).forEach { (level, name, color) ->
+                            val isSelected = compressionLevel == level
+                            Surface(
+                                onClick = { compressionLevel = level },
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSelected) color else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+                                modifier = Modifier.weight(1f).height(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(4.dp)) {
+                                    Text(name, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                }
+                            }
+                        }
+                    }
+
+                    if (isProcessing) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("جاري الضغط وتقليل حجم المستند...", fontSize = 13.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (selectedSingleFilePath.isEmpty()) {
+                            Toast.makeText(context, "الرجاء اختيار ملف أولاً", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (targetFileName.trim().isEmpty()) {
+                            Toast.makeText(context, "الرجاء إدخال اسم للملف الناتج", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        isProcessing = true
+                        viewModel.compressPdf(
+                            context = context,
+                            filePath = selectedSingleFilePath,
+                            qualityLevel = compressionLevel,
+                            targetName = targetFileName,
+                            onSuccess = { path ->
+                                isProcessing = false
+                                activeTool = ActiveTool.None
+                                Toast.makeText(context, "تم ضغط الملف بنجاح وحفظه في: $path", Toast.LENGTH_LONG).show()
+                            },
+                            onError = { err ->
+                                isProcessing = false
+                                Toast.makeText(context, "خطأ: $err", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    },
+                    enabled = !isProcessing && selectedSingleFilePath.isNotEmpty()
+                ) {
+                    Text("ابدأ الضغط الآن")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { activeTool = ActiveTool.None }, enabled = !isProcessing) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    // Dialog / Sheet for Rotate Tool
+    if (activeTool == ActiveTool.Rotate) {
+        var dropdownExpanded by remember { mutableStateOf(false) }
+        val selectedFile = uiState.allPdfFiles.find { it.filePath == selectedSingleFilePath }
+
+        AlertDialog(
+            onDismissRequest = { if (!isProcessing) activeTool = ActiveTool.None },
+            title = { Text("تدوير صفحات PDF", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("تعديل وتدوير اتجاه صفحات مستند الـ PDF:", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
+
+                    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                        OutlinedButton(
+                            onClick = { dropdownExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Text(selectedFile?.fileName ?: "اختر الملف المراد تعديله...", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Icon(Icons.Default.ArrowDropDown, null)
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.85f)
+                        ) {
+                            uiState.allPdfFiles.forEach { file ->
+                                DropdownMenuItem(
+                                    text = { Text(file.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    onClick = {
+                                        selectedSingleFilePath = file.filePath
+                                        targetFileName = "${file.fileName}_مدور"
+                                        dropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = targetFileName,
+                        onValueChange = { targetFileName = it },
+                        label = { Text("اسم الملف الناتج") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    )
+
+                    Text("زاوية التدوير:", fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(90, 180, 270).forEach { deg ->
+                            val isSelected = rotateDegrees == deg
+                            Surface(
+                                onClick = { rotateDegrees = deg },
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+                                modifier = Modifier.weight(1f).height(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text("$deg°", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = rotateTargetPage,
+                        onValueChange = { rotateTargetPage = it },
+                        label = { Text("الصفحة المستهدفة (-1 لجميع الصفحات)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (isProcessing) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("جاري تدوير صفحات المستند...", fontSize = 13.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (selectedSingleFilePath.isEmpty()) {
+                            Toast.makeText(context, "الرجاء اختيار ملف أولاً", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (targetFileName.trim().isEmpty()) {
+                            Toast.makeText(context, "الرجاء إدخال اسم للملف الناتج", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        val pageVal = rotateTargetPage.toIntOrNull() ?: -1
+                        isProcessing = true
+                        viewModel.rotatePdf(
+                            context = context,
+                            filePath = selectedSingleFilePath,
+                            degrees = rotateDegrees,
+                            targetPage = pageVal,
+                            targetName = targetFileName,
+                            onSuccess = { path ->
+                                isProcessing = false
+                                activeTool = ActiveTool.None
+                                Toast.makeText(context, "تم تدوير وحفظ الملف بنجاح في: $path", Toast.LENGTH_LONG).show()
+                            },
+                            onError = { err ->
+                                isProcessing = false
+                                Toast.makeText(context, "خطأ: $err", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    },
+                    enabled = !isProcessing && selectedSingleFilePath.isNotEmpty()
+                ) {
+                    Text("تدوير وحفظ")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { activeTool = ActiveTool.None }, enabled = !isProcessing) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    // Dialog / Sheet for Reorder Tool
+    if (activeTool == ActiveTool.Reorder) {
+        var dropdownExpanded by remember { mutableStateOf(false) }
+        val selectedFile = uiState.allPdfFiles.find { it.filePath == selectedSingleFilePath }
+
+        AlertDialog(
+            onDismissRequest = { if (!isProcessing) activeTool = ActiveTool.None },
+            title = { Text("إعادة ترتيب الصفحات", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("أدخل أرقام الصفحات بالترتيب الجديد المطلوب (مفصولة بفواصل):", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
+
+                    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                        OutlinedButton(
+                            onClick = { dropdownExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Text(selectedFile?.fileName ?: "اختر الملف المراد إعادة ترتيبه...", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Icon(Icons.Default.ArrowDropDown, null)
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.85f)
+                        ) {
+                            uiState.allPdfFiles.forEach { file ->
+                                DropdownMenuItem(
+                                    text = { Text(file.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    onClick = {
+                                        selectedSingleFilePath = file.filePath
+                                        targetFileName = "${file.fileName}_مرتب"
+                                        dropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = targetFileName,
+                        onValueChange = { targetFileName = it },
+                        label = { Text("اسم الملف الناتج") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = reorderSequence,
+                        onValueChange = { reorderSequence = it },
+                        label = { Text("ترتيب الصفحات (مثال: 3, 1, 2, 4)") },
+                        placeholder = { Text("مثال: 3, 1, 2, 4") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (isProcessing) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("جاري إعادة ترتيب وحفظ الصفحات...", fontSize = 13.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (selectedSingleFilePath.isEmpty()) {
+                            Toast.makeText(context, "الرجاء اختيار ملف أولاً", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (targetFileName.trim().isEmpty()) {
+                            Toast.makeText(context, "الرجاء إدخال اسم للملف الناتج", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        val orderList = reorderSequence.split(",").mapNotNull { it.trim().toIntOrNull() }
+                        if (orderList.isEmpty()) {
+                            Toast.makeText(context, "الرجاء إدخال ترتيب صفحات صحيح (مثال: 3,1,2)", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        isProcessing = true
+                        viewModel.reorderPdf(
+                            context = context,
+                            filePath = selectedSingleFilePath,
+                            pageOrderList = orderList,
+                            targetName = targetFileName,
+                            onSuccess = { path ->
+                                isProcessing = false
+                                activeTool = ActiveTool.None
+                                Toast.makeText(context, "تم إعادة ترتيب الصفحات وحفظ الملف في: $path", Toast.LENGTH_LONG).show()
+                            },
+                            onError = { err ->
+                                isProcessing = false
+                                Toast.makeText(context, "خطأ: $err", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    },
+                    enabled = !isProcessing && selectedSingleFilePath.isNotEmpty()
+                ) {
+                    Text("إعادة الترتيب وحفظ")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { activeTool = ActiveTool.None }, enabled = !isProcessing) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    // Dialog / Sheet for DeletePages Tool
+    if (activeTool == ActiveTool.DeletePages) {
+        var dropdownExpanded by remember { mutableStateOf(false) }
+        val selectedFile = uiState.allPdfFiles.find { it.filePath == selectedSingleFilePath }
+
+        AlertDialog(
+            onDismissRequest = { if (!isProcessing) activeTool = ActiveTool.None },
+            title = { Text("حذف صفحات من PDF", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("أدخل أرقام الصفحات التي ترغب بحذفها (مفصولة بفواصل):", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
+
+                    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                        OutlinedButton(
+                            onClick = { dropdownExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Text(selectedFile?.fileName ?: "اختر الملف لحذف صفحات منه...", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Icon(Icons.Default.ArrowDropDown, null)
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.85f)
+                        ) {
+                            uiState.allPdfFiles.forEach { file ->
+                                DropdownMenuItem(
+                                    text = { Text(file.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    onClick = {
+                                        selectedSingleFilePath = file.filePath
+                                        targetFileName = "${file.fileName}_معدل"
+                                        dropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = targetFileName,
+                        onValueChange = { targetFileName = it },
+                        label = { Text("اسم الملف الناتج") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = deletePagesSetInput,
+                        onValueChange = { deletePagesSetInput = it },
+                        label = { Text("رقم الصفحات للحذف (مثال: 2, 4)") },
+                        placeholder = { Text("مثال: 2, 4") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (isProcessing) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("جاري حذف الصفحات المحددة وحفظ المستند...", fontSize = 13.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (selectedSingleFilePath.isEmpty()) {
+                            Toast.makeText(context, "الرجاء اختيار ملف أولاً", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (targetFileName.trim().isEmpty()) {
+                            Toast.makeText(context, "الرجاء إدخال اسم للملف الناتج", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        val pagesToDelete = deletePagesSetInput.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+                        if (pagesToDelete.isEmpty()) {
+                            Toast.makeText(context, "الرجاء إدخال أرقام صفحات صحيحة لحذفها", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        isProcessing = true
+                        viewModel.deletePagesPdf(
+                            context = context,
+                            filePath = selectedSingleFilePath,
+                            pagesToDelete = pagesToDelete,
+                            targetName = targetFileName,
+                            onSuccess = { path ->
+                                isProcessing = false
+                                activeTool = ActiveTool.None
+                                Toast.makeText(context, "تم حذف الصفحات بنجاح وحفظ الملف في: $path", Toast.LENGTH_LONG).show()
+                            },
+                            onError = { err ->
+                                isProcessing = false
+                                Toast.makeText(context, "خطأ: $err", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    },
+                    enabled = !isProcessing && selectedSingleFilePath.isNotEmpty()
+                ) {
+                    Text("تأكيد الحذف وحفظ")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { activeTool = ActiveTool.None }, enabled = !isProcessing) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    // Dialog / Sheet for ImageToPdf Tool
+    if (activeTool == ActiveTool.ImageToPdf) {
+        val imagePickerLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.GetMultipleContents()
+        ) { uris ->
+            val paths = uris.mapNotNull { uri ->
+                viewModel.copyUriToCache(context, uri, "img_${System.currentTimeMillis()}_${uri.lastPathSegment}.jpg")
+            }
+            selectedImagePaths = selectedImagePaths + paths
+        }
+
+        AlertDialog(
+            onDismissRequest = { if (!isProcessing) activeTool = ActiveTool.None },
+            title = { Text("تحويل صور إلى PDF", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 350.dp)
+                ) {
+                    Text("اختر صورة أو أكثر لتحويلها إلى ملف PDF بالترتيب المناسب:", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
+                    
+                    OutlinedTextField(
+                        value = targetFileName,
+                        onValueChange = { targetFileName = it },
+                        label = { Text("اسم ملف الـ PDF الناتج") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    )
+
+                    Button(
+                        onClick = { imagePickerLauncher.launch("image/*") },
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("إضافة صور من المعرض (${selectedImagePaths.size})")
+                    }
+
+                    if (selectedImagePaths.isEmpty()) {
+                        Text("لم يتم اختيار أي صور حتى الآن.", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                    } else {
+                        Text("الصور المحددة (اسحب للحذف):", fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+                        LazyColumn(
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            itemsIndexed(selectedImagePaths) { index, path ->
+                                val file = File(path)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                        .padding(8.dp)
+                                ) {
+                                    Text("${index + 1}. ${file.name}", fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                                    IconButton(
+                                        onClick = {
+                                            selectedImagePaths = selectedImagePaths.toMutableList().apply { removeAt(index) }
+                                        },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = "حذف", tint = Color.Red, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (isProcessing) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("جاري تحويل الصور وتوليد الـ PDF...", fontSize = 13.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (targetFileName.trim().isEmpty()) {
+                            Toast.makeText(context, "الرجاء إدخال اسم الملف الناتج", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (selectedImagePaths.isEmpty()) {
+                            Toast.makeText(context, "الرجاء اختيار صورة واحدة على الأقل", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        isProcessing = true
+                        viewModel.imageToPdf(
+                            context = context,
+                            imagePaths = selectedImagePaths,
+                            targetName = targetFileName,
+                            onSuccess = { path ->
+                                isProcessing = false
+                                activeTool = ActiveTool.None
+                                Toast.makeText(context, "تم حفظ الملف بنجاح في: $path", Toast.LENGTH_LONG).show()
+                            },
+                            onError = { err ->
+                                isProcessing = false
+                                Toast.makeText(context, "خطأ: $err", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    },
+                    enabled = !isProcessing && selectedImagePaths.isNotEmpty()
+                ) {
+                    Text("إنشاء ملف PDF")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { activeTool = ActiveTool.None }, enabled = !isProcessing) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    // Dialog / Sheet for PdfToImages Tool
+    if (activeTool == ActiveTool.PdfToImages) {
+        var dropdownExpanded by remember { mutableStateOf(false) }
+        val selectedFile = uiState.allPdfFiles.find { it.filePath == selectedSingleFilePath }
+
+        AlertDialog(
+            onDismissRequest = { if (!isProcessing) activeTool = ActiveTool.None },
+            title = { Text("تحويل PDF إلى صور", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("اختر ملف الـ PDF وصيغة التصدير:", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
+
+                    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                        OutlinedButton(
+                            onClick = { dropdownExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Text(selectedFile?.fileName ?: "اختر الملف لتحويله...", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Icon(Icons.Default.ArrowDropDown, null)
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.85f)
+                        ) {
+                            uiState.allPdfFiles.forEach { file ->
+                                DropdownMenuItem(
+                                    text = { Text(file.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    onClick = {
+                                        selectedSingleFilePath = file.filePath
+                                        dropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Text("صيغة الصور الناتجة:", fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { pdfToImagesFormat = "PNG" }) {
+                            RadioButton(selected = pdfToImagesFormat == "PNG", onClick = { pdfToImagesFormat = "PNG" })
+                            Text("PNG (جودة عالية)")
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { pdfToImagesFormat = "JPG" }) {
+                            RadioButton(selected = pdfToImagesFormat == "JPG", onClick = { pdfToImagesFormat = "JPG" })
+                            Text("JPG (حجم مدمج)")
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = pdfToImagesPages,
+                        onValueChange = { pdfToImagesPages = it },
+                        label = { Text("تصدير صفحات معينة (اختياري)") },
+                        placeholder = { Text("مثال: 1, 2, 5-8 (اتركه فارغاً للكل)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (isProcessing) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("جاري تصدير صفحات الـ PDF لصور...", fontSize = 13.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (selectedSingleFilePath.isEmpty()) {
+                            Toast.makeText(context, "الرجاء اختيار ملف أولاً", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        isProcessing = true
+                        viewModel.pdfToImages(
+                            context = context,
+                            filePath = selectedSingleFilePath,
+                            format = pdfToImagesFormat,
+                            customPagesStr = pdfToImagesPages,
+                            onSuccess = { paths ->
+                                isProcessing = false
+                                activeTool = ActiveTool.None
+                                Toast.makeText(context, "تم تصدير ${paths.size} صور بنجاح وحفظها في الصور التطبيقية!", Toast.LENGTH_LONG).show()
+                            },
+                            onError = { err ->
+                                isProcessing = false
+                                Toast.makeText(context, "خطأ: $err", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    },
+                    enabled = !isProcessing && selectedSingleFilePath.isNotEmpty()
+                ) {
+                    Text("تصدير الصور")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { activeTool = ActiveTool.None }, enabled = !isProcessing) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    // Dialog / Sheet for LockPdf Tool
+    if (activeTool == ActiveTool.LockPdf) {
+        var dropdownExpanded by remember { mutableStateOf(false) }
+        val selectedFile = uiState.allPdfFiles.find { it.filePath == selectedSingleFilePath }
+
+        AlertDialog(
+            onDismissRequest = { if (!isProcessing) activeTool = ActiveTool.None },
+            title = { Text("تشفير وقفل ملف PDF", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 350.dp)
+                ) {
+                    Text("اختر ملف الـ PDF وأدخل كلمة سر لحمايته:", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
+
+                    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                        OutlinedButton(
+                            onClick = { dropdownExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Text(selectedFile?.fileName ?: "اختر ملف الـ PDF...", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Icon(Icons.Default.ArrowDropDown, null)
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.85f)
+                        ) {
+                            uiState.allPdfFiles.forEach { file ->
+                                DropdownMenuItem(
+                                    text = { Text(file.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    onClick = {
+                                        selectedSingleFilePath = file.filePath
+                                        targetFileName = "${file.fileName}_محمي"
+                                        dropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = targetFileName,
+                        onValueChange = { targetFileName = it },
+                        label = { Text("اسم الملف الناتج") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = lockPassword,
+                        onValueChange = { lockPassword = it },
+                        label = { Text("كلمة سر فتح الملف") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    )
+
+                    Text("خيارات الصلاحيات:", fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+                    LazyColumn(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        item {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { lockAllowPrinting = !lockAllowPrinting }) {
+                                Checkbox(checked = lockAllowPrinting, onCheckedChange = { lockAllowPrinting = it })
+                                Text("السماح بطباعة الملف", fontSize = 12.sp)
+                            }
+                        }
+                        item {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { lockAllowCopying = !lockAllowCopying }) {
+                                Checkbox(checked = lockAllowCopying, onCheckedChange = { lockAllowCopying = it })
+                                Text("السماح بنسخ النصوص والمحتوى", fontSize = 12.sp)
+                            }
+                        }
+                        item {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { lockAllowModifying = !lockAllowModifying }) {
+                                Checkbox(checked = lockAllowModifying, onCheckedChange = { lockAllowModifying = it })
+                                Text("السماح بتعديل صفحات الملف", fontSize = 12.sp)
+                            }
+                        }
+                        item {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { lockAllowAnnotations = !lockAllowAnnotations }) {
+                                Checkbox(checked = lockAllowAnnotations, onCheckedChange = { lockAllowAnnotations = it })
+                                Text("السماح بإضافة تعليقات وشروح", fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    if (isProcessing) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("جاري تشفير وحماية الملف بكلمة سر...", fontSize = 13.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (selectedSingleFilePath.isEmpty()) {
+                            Toast.makeText(context, "الرجاء اختيار ملف أولاً", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (targetFileName.trim().isEmpty()) {
+                            Toast.makeText(context, "الرجاء إدخال اسم للملف الناتج", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (lockPassword.isEmpty()) {
+                            Toast.makeText(context, "الرجاء إدخال كلمة سر لقفل الملف", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        isProcessing = true
+                        viewModel.lockPdf(
+                            context = context,
+                            filePath = selectedSingleFilePath,
+                            userPassword = lockPassword,
+                            allowPrinting = lockAllowPrinting,
+                            allowCopying = lockAllowCopying,
+                            allowModifying = lockAllowModifying,
+                            allowAnnotations = lockAllowAnnotations,
+                            targetName = targetFileName,
+                            onSuccess = { path ->
+                                isProcessing = false
+                                activeTool = ActiveTool.None
+                                Toast.makeText(context, "تم قفل وحماية الملف بنجاح وحفظه في: $path", Toast.LENGTH_LONG).show()
+                            },
+                            onError = { err ->
+                                isProcessing = false
+                                Toast.makeText(context, "خطأ: $err", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    },
+                    enabled = !isProcessing && selectedSingleFilePath.isNotEmpty()
+                ) {
+                    Text("قفل وتشفير الملف")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { activeTool = ActiveTool.None }, enabled = !isProcessing) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    // Dialog / Sheet for UnlockPdf Tool
+    if (activeTool == ActiveTool.UnlockPdf) {
+        var dropdownExpanded by remember { mutableStateOf(false) }
+        val selectedFile = uiState.allPdfFiles.find { it.filePath == selectedSingleFilePath }
+
+        AlertDialog(
+            onDismissRequest = { if (!isProcessing) activeTool = ActiveTool.None },
+            title = { Text("فك قفل وإزالة حماية PDF", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("اختر ملف الـ PDF المشفر وأدخل كلمة السر لإزالة الحماية:", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
+
+                    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                        OutlinedButton(
+                            onClick = { dropdownExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Text(selectedFile?.fileName ?: "اختر ملف الـ PDF المشفر...", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Icon(Icons.Default.ArrowDropDown, null)
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.85f)
+                        ) {
+                            uiState.allPdfFiles.forEach { file ->
+                                DropdownMenuItem(
+                                    text = { Text(file.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    onClick = {
+                                        selectedSingleFilePath = file.filePath
+                                        targetFileName = "${file.fileName}_مفتوح"
+                                        dropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = targetFileName,
+                        onValueChange = { targetFileName = it },
+                        label = { Text("اسم الملف الناتج") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = unlockPassword,
+                        onValueChange = { unlockPassword = it },
+                        label = { Text("كلمة السر الحالية لفتح الملف") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (isProcessing) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("جاري معالجة وفك تشفير الملف...", fontSize = 13.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (selectedSingleFilePath.isEmpty()) {
+                            Toast.makeText(context, "الرجاء اختيار ملف أولاً", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (targetFileName.trim().isEmpty()) {
+                            Toast.makeText(context, "الرجاء إدخال اسم للملف الناتج", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (unlockPassword.isEmpty()) {
+                            Toast.makeText(context, "الرجاء إدخال كلمة السر الحالية لإلغاء الحماية", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        isProcessing = true
+                        viewModel.unlockPdf(
+                            context = context,
+                            filePath = selectedSingleFilePath,
+                            password = unlockPassword,
+                            targetName = targetFileName,
+                            onSuccess = { path ->
+                                isProcessing = false
+                                activeTool = ActiveTool.None
+                                Toast.makeText(context, "تم إزالة الحماية وحفظ الملف بنجاح في: $path", Toast.LENGTH_LONG).show()
+                            },
+                            onError = { err ->
+                                isProcessing = false
+                                Toast.makeText(context, "خطأ: $err", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    },
+                    enabled = !isProcessing && selectedSingleFilePath.isNotEmpty()
+                ) {
+                    Text("فك حماية وقفل الملف")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { activeTool = ActiveTool.None }, enabled = !isProcessing) {
+                    Text("إلغاء")
+                }
             }
         )
     }
@@ -2398,7 +3714,7 @@ fun CustomBottomBar(
                 label = "المجلدات",
                 icon = { tint ->
                     Icon(
-                        imageVector = if (selectedTab == DashboardTab.Folders) Icons.Filled.Description else Icons.Outlined.Description,
+                        imageVector = if (selectedTab == DashboardTab.Folders) Icons.Filled.Folder else Icons.Outlined.Folder,
                         contentDescription = "المجلدات",
                         tint = tint,
                         modifier = Modifier.size(22.dp)
@@ -2415,7 +3731,9 @@ fun CustomBottomBar(
                 onClick = { onTabSelected(DashboardTab.Home) },
                 label = "الرئيسية",
                 icon = { tint ->
-                    HomeSmileIcon(
+                    Icon(
+                        imageVector = if (selectedTab == DashboardTab.Home) Icons.Filled.Home else Icons.Outlined.Home,
+                        contentDescription = "الرئيسية",
                         tint = tint,
                         modifier = Modifier.size(22.dp)
                     )
