@@ -136,6 +136,10 @@ fun ViewerScreen(
     fun extractWordFromUrl(url: String): String {
         try {
             val uri = Uri.parse(url)
+            val queryText = uri.getQueryParameter("q") ?: uri.getQueryParameter("text")
+            if (queryText != null) {
+                return Uri.decode(queryText).trim()
+            }
             val lastSegment = uri.lastPathSegment ?: return "نطق الكلمة"
             val cleanName = if (lastSegment.contains(".")) {
                 lastSegment.substringBeforeLast(".")
@@ -253,8 +257,11 @@ fun ViewerScreen(
 
     // Back button handler
     BackHandler {
+        val webView = webViewRef
         if (state.isEditMode) {
             viewModel.toggleEditMode(false)
+        } else if (webView != null && webView.canGoBack()) {
+            webView.goBack()
         } else {
             viewModel.goBackToDashboard()
         }
@@ -868,7 +875,10 @@ fun PdfWebView(
                                       url.contains("/audio/", ignoreCase = true) ||
                                       url.contains("/sounds/", ignoreCase = true) ||
                                       url.contains("/pronunciation/", ignoreCase = true) ||
-                                      url.contains("audio_url=", ignoreCase = true)
+                                      url.contains("audio_url=", ignoreCase = true) ||
+                                      url.contains("translate_tts", ignoreCase = true) ||
+                                      url.contains("translate.google", ignoreCase = true) ||
+                                      url.contains("google.com/speech", ignoreCase = true)
                         if (isAudio) {
                             onAudioLinkClicked(url)
                             return true
@@ -888,7 +898,10 @@ fun PdfWebView(
                                       url.contains("/audio/", ignoreCase = true) ||
                                       url.contains("/sounds/", ignoreCase = true) ||
                                       url.contains("/pronunciation/", ignoreCase = true) ||
-                                      url.contains("audio_url=", ignoreCase = true)
+                                      url.contains("audio_url=", ignoreCase = true) ||
+                                      url.contains("translate_tts", ignoreCase = true) ||
+                                      url.contains("translate.google", ignoreCase = true) ||
+                                      url.contains("google.com/speech", ignoreCase = true)
                         if (isAudio) {
                             onAudioLinkClicked(url)
                             return true
@@ -1077,8 +1090,11 @@ fun PdfWebView(
                                                 if (interactive) {
                                                     return;
                                                 }
+                                                if (window.getSelection && window.getSelection().toString().trim() !== "") {
+                                                    return;
+                                                }
                                                 AndroidBridge.onSingleTap();
-                                            });
+                                            }, true);
 
                                             // Capture-phase link interceptor to prevent WebView navigation for audio URLs
                                             document.addEventListener('click', function(e) {
@@ -1092,7 +1108,7 @@ fun PdfWebView(
                                                                   url.toLowerCase().indexOf('/audio/') !== -1 || 
                                                                   url.toLowerCase().indexOf('/sounds/') !== -1 || 
                                                                   url.toLowerCase().indexOf('/pronunciation/') !== -1 || 
-                                                                  url.toLowerCase().indexOf('audio_url=') !== -1;
+                                                                  url.toLowerCase().indexOf('audio_url=') !== -1 || url.toLowerCase().indexOf('translate_tts') !== -1 || url.toLowerCase().indexOf('translate.google') !== -1 || url.toLowerCase().indexOf('google.com/speech') !== -1;
                                                     if (isAudio) {
                                                         e.preventDefault();
                                                         e.stopPropagation();
@@ -1101,6 +1117,22 @@ fun PdfWebView(
                                                     }
                                                 }
                                             }, true);
+
+                                            // Pause auto-scroll on manual user interaction (touch, drag, mouse click, mouse wheel)
+                                            var handleManualInteraction = function() {
+                                                if (window.autoScrollInterval) {
+                                                     AndroidBridge.onManualScroll();
+                                                }
+                                            };
+                                            var viewerContainer = document.getElementById('viewerContainer');
+                                            if (viewerContainer) {
+                                                viewerContainer.addEventListener('touchstart', handleManualInteraction, { passive: true });
+                                                viewerContainer.addEventListener('mousedown', handleManualInteraction, { passive: true });
+                                                viewerContainer.addEventListener('wheel', handleManualInteraction, { passive: true });
+                                            } else {
+                                                document.addEventListener('touchstart', handleManualInteraction, { passive: true });
+                                                document.addEventListener('mousedown', handleManualInteraction, { passive: true });
+                                            }
 
                                             // Apply current UI states
                                             window.applyTheme('${state.readingTheme}');
@@ -1135,6 +1167,13 @@ fun PdfWebView(
                     fun onAudioLinkClicked(url: String) {
                         coroutineScope.launch {
                             onAudioLinkClicked(url)
+                        }
+                    }
+
+                    @android.webkit.JavascriptInterface
+                    fun onManualScroll() {
+                        coroutineScope.launch {
+                            viewModel.stopAutoScroll()
                         }
                     }
 
